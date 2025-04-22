@@ -1,3 +1,17 @@
+// smart_wallet_manager.did
+
 service : {
-    "greet": (text) -> (text) query;
+  // Generates and returns the EVM address associated with the given Principal ID.
+  // If an address already exists for the principal, it returns the existing address.
+  // If not, it generates a new one, stores it, and returns it.
+  // This is an update call as it potentially modifies state and calls t-ECDSA.
+  "generate_evm_address_for_principal": (user: principal) -> (variant { Ok: text; Err: text });
+
+  // Verifies if a user (Principal) has an associated EVM address stored.
+  // This is a query call.
+  "verify_user": (user: principal) -> (bool) query;
+
+  // Placeholder for Milestone 2: Manages whitelisted protocols/tokens.
+  // Update call, currently a stub.
+  "manage_whitelist": () -> (); // Takes no args, returns nothing for now
 }

@@ -10,5 +10,20 @@ crate-type = ["cdylib"]
 
 [dependencies]
 candid = "0.10"
-ic-cdk = "0.17"
-ic-cdk-timers = "0.11" # Feel free to remove this dependency if you don't need timers
+ic-cdk = "0.16"
+ic-cdk-macros = "0.9"
+ic-cdk-timers = "0.10"
+ic-stable-structures = "0.6"
+
+# EVM / ECDSA related - Following ic-alloy README
+alloy = { git = "https://github.com/ic-alloy/ic-alloy.git", tag = "v0.3.5-icp.0", default-features = false, features = ["icp", "signers"] }
+ethers-core = { version = "2.0", default-features = false }
+hex = "0.4"
+getrandom = { version = "0.2", features = ["custom"] }
+
+# Serialization
+serde = "1.0"
+
+[profile.release]
+lto = true
+opt-level = 'z'
