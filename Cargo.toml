@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "src/yieldex-ic-wallet-manager-backend"
+]
+resolver = "2"
