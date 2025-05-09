@@ -1,0 +1,17 @@
+[package]
+name = "yieldex-ic-wallet-manager-tests"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "yieldex_ic_wallet_manager_tests"
+path = "lib.rs"
+
+[dependencies]
+pocket-ic = "9.0.0"
+serde = { version = "1.0", features = ["derive"] }
+ic-cdk = "0.17.0"
+candid = "0.10.13"
+
+[dev-dependencies]
+yieldex-ic-wallet-manager-backend = { path = "../src/yieldex-ic-wallet-manager-backend" } 

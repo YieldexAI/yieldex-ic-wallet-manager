@@ -23,3 +23,26 @@ dist/
 
 # environment variables
 .env
+
+# Rust/Cargo files
+**/*.rs.bk
+Cargo.lock
+
+# Python files
+**/__pycache__/
+**/.pytest_cache/
+**/.venv/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.egg-info/
+**/*.egg
+
+# IDE files
+*.swp
+*.swo
+
+
+# Project Docs
+project_docs/
+.cursor/

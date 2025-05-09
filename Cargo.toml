@@ -1,5 +1,6 @@
 [workspace]
 members = [
-    "src/yieldex-ic-wallet-manager-backend"
+    "src/yieldex-ic-wallet-manager-backend",
+    "tests"
 ]
 resolver = "2"

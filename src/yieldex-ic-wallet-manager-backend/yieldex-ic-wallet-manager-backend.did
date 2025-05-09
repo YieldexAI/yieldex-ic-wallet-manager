@@ -1,17 +1,55 @@
 // smart_wallet_manager.did
 
+type PermissionsId = text;
+type TokenAddress = text;
+type ProtocolAddress = text;
+type TransferLimit = record {
+    token_address: TokenAddress;
+    daily_limit: nat64;
+    max_tx_amount: nat64;
+};
+
+type Permissions = record {
+    id: PermissionsId;
+    owner: principal;
+    whitelisted_protocols: vec ProtocolAddress;
+    whitelisted_tokens: vec TokenAddress;
+    transfer_limits: vec TransferLimit;
+    created_at: nat64;
+    updated_at: nat64;
+};
+
+type CreatePermissionsRequest = record {
+    whitelisted_protocols: vec ProtocolAddress;
+    whitelisted_tokens: vec TokenAddress;
+    transfer_limits: vec TransferLimit;
+};
+
+type UpdatePermissionsRequest = record {
+    permissions_id: PermissionsId;
+    whitelisted_protocols: opt vec ProtocolAddress;
+    whitelisted_tokens: opt vec TokenAddress;
+    transfer_limits: opt vec TransferLimit;
+};
+
 service : {
-  // Generates and returns the EVM address associated with the given Principal ID.
-  // If an address already exists for the principal, it returns the existing address.
-  // If not, it generates a new one, stores it, and returns it.
-  // This is an update call as it potentially modifies state and calls t-ECDSA.
-  "generate_evm_address_for_principal": (user: principal) -> (variant { Ok: text; Err: text });
+    // Generates and returns the EVM address associated with the caller's Principal ID.
+    // If an address already exists for the caller, it returns the existing address.
+    // If not, it generates a new one, stores it, and returns it.
+    // This is an update call as it potentially modifies state and calls t-ECDSA.
+    "generate_evm_address": () -> (variant { Ok: text; Err: text });
 
-  // Verifies if a user (Principal) has an associated EVM address stored.
-  // This is a query call.
-  "verify_user": (user: principal) -> (bool) query;
+    // Returns the EVM address associated with the caller's Principal ID, if one exists.
+    "get_evm_address": () -> (opt text) query;
 
-  // Placeholder for Milestone 2: Manages whitelisted protocols/tokens.
-  // Update call, currently a stub.
-  "manage_whitelist": () -> (); // Takes no args, returns nothing for now
+    // Verifies if a user (Principal) has an associated EVM address stored.
+    // This is a query call.
+    "verify_user": (user: principal) -> (bool) query;
+
+    // Permissions CRUD operations (only accessible by the Principal that owns the EVM address)
+    "create_permissions": (req: CreatePermissionsRequest) -> (variant { Ok: Permissions; Err: text });
+    "get_permissions": (permissions_id: PermissionsId) -> (variant { Ok: Permissions; Err: text }) query;
+    "get_all_permissions": () -> (variant { Ok: vec Permissions; Err: text }) query;
+    "update_permissions": (req: UpdatePermissionsRequest) -> (variant { Ok: Permissions; Err: text });
+    "delete_permissions": (permissions_id: PermissionsId) -> (variant { Ok: bool; Err: text });
 }

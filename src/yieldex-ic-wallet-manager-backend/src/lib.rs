@@ -12,11 +12,50 @@ use alloy::signers::Signer; // The Signer trait
 use alloy::primitives::Address;
 
 // --- Configuration ---
-const KEY_NAME: &str = "dfx_test_key"; // Use "key_1" for mainnet
+const KEY_NAME: &str = "dfx_test_key1"; // Используем правильное имя ключа для PocketIC
 
 // --- Types ---
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
+// --- Permissions Types ---
+type PermissionsId = String;
+type TokenAddress = String;
+type ProtocolAddress = String;
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct TransferLimit {
+    token_address: TokenAddress,
+    daily_limit: u64,
+    max_tx_amount: u64,
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct Permissions {
+    id: PermissionsId,
+    owner: Principal,
+    whitelisted_protocols: Vec<ProtocolAddress>,
+    whitelisted_tokens: Vec<TokenAddress>,
+    transfer_limits: Vec<TransferLimit>,
+    created_at: u64,
+    updated_at: u64,
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct CreatePermissionsRequest {
+    whitelisted_protocols: Vec<ProtocolAddress>,
+    whitelisted_tokens: Vec<TokenAddress>,
+    transfer_limits: Vec<TransferLimit>,
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct UpdatePermissionsRequest {
+    permissions_id: PermissionsId,
+    whitelisted_protocols: Option<Vec<ProtocolAddress>>,
+    whitelisted_tokens: Option<Vec<TokenAddress>>,
+    transfer_limits: Option<Vec<TransferLimit>>,
+}
+
+// Storable implementations
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 struct StorablePrincipal(Principal);
 
@@ -32,7 +71,7 @@ impl Storable for StorablePrincipal {
     const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Unbounded;
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 struct StorableString(String);
 
 impl Storable for StorableString {
@@ -49,8 +88,26 @@ impl Storable for StorableString {
     const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Bounded { max_size: 64, is_fixed_size: false };
 }
 
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+struct StorablePermissions(Permissions);
+
+impl Storable for StorablePermissions {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        let bytes = candid::encode_one(&self.0).expect("Failed to encode permissions");
+        Cow::Owned(bytes)
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        let permissions: Permissions = candid::decode_one(&bytes).expect("Failed to decode permissions");
+        StorablePermissions(permissions)
+    }
+
+    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Unbounded;
+}
+
 // --- State ---
 const PRINCIPAL_MAP_MEMORY_ID: MemoryId = MemoryId::new(0);
+const PERMISSIONS_MAP_MEMORY_ID: MemoryId = MemoryId::new(1);
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
@@ -62,20 +119,56 @@ thread_local! {
             MEMORY_MANAGER.with(|m| m.borrow().get(PRINCIPAL_MAP_MEMORY_ID)),
         )
     );
+    
+    // Map PermissionsId -> Permissions
+    static PERMISSIONS_MAP: RefCell<StableBTreeMap<StorableString, StorablePermissions, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(PERMISSIONS_MAP_MEMORY_ID)),
+        )
+    );
 }
 
 // --- Helper Functions ---
 
-// Removed get_ecdsa_key_id function as it's no longer used
+// Get current timestamp in milliseconds
+fn now() -> u64 {
+    // Returns milliseconds since Unix epoch
+    ic_cdk::api::time() / 1_000_000
+}
 
-// Removed get_principal_public_key
+// Generate a unique ID for Permissions
+async fn generate_permissions_id() -> String {
+    let timestamp: u64 = now();
+    let random_result = ic_cdk::api::management_canister::main::raw_rand().await;
+    let random_bytes = match random_result {
+        Ok((bytes,)) => bytes,
+        Err((_, err)) => {
+            ic_cdk::println!("Error getting random bytes: {}", err);
+            // Fallback to a timestamp-based ID if random generation fails
+            format!("{:x}", timestamp).into_bytes()
+        }
+    };
+    
+    let mut id_bytes = timestamp.to_be_bytes().to_vec();
+    if random_bytes.len() >= 8 {
+        id_bytes.extend_from_slice(&random_bytes[0..8]);
+    } else {
+        // Fallback in case we received fewer than expected random bytes
+        id_bytes.extend_from_slice(&random_bytes);
+        // Pad with zeros if needed
+        while id_bytes.len() < 16 {
+            id_bytes.push(0);
+        }
+    }
+    
+    hex::encode(id_bytes)
+}
 
-// Removed public_key_to_evm_address
-
-// --- Canister Methods ---
+// --- EVM Address Management ---
 
 #[update]
-async fn generate_evm_address_for_principal(user: Principal) -> Result<String, String> {
+async fn generate_evm_address() -> Result<String, String> {
+    let user = ic_cdk::caller();
     let storable_principal = StorablePrincipal(user);
 
     // 1. Check if address already exists for the given principal
@@ -111,16 +204,164 @@ async fn generate_evm_address_for_principal(user: Principal) -> Result<String, S
 }
 
 #[query]
+fn get_evm_address() -> Option<String> {
+    let user = ic_cdk::caller();
+    PRINCIPAL_TO_ADDRESS_MAP.with(|map| {
+        map.borrow()
+            .get(&StorablePrincipal(user))
+            .map(|storable| storable.0)
+    })
+}
+
+#[query]
 fn verify_user(user: Principal) -> bool {
     // Check if the user has an address stored in the map.
     PRINCIPAL_TO_ADDRESS_MAP.with(|map| map.borrow().contains_key(&StorablePrincipal(user)))
 }
 
+// --- Permissions Management ---
+
+// Check if caller is owner of the permissions
+fn is_permissions_owner(permissions_id: &str, caller: Principal) -> bool {
+    PERMISSIONS_MAP.with(|map| {
+        map.borrow()
+            .get(&StorableString(permissions_id.to_string()))
+            .map_or(false, |p| p.0.owner == caller)
+    })
+}
+
 #[update]
-fn manage_whitelist(/* Placeholder arguments if needed later */) /* -> Result<(), String> */ {
-    // Placeholder stub for Milestone 2 - Does nothing for now.
-    ic_cdk::println!("manage_whitelist called (not implemented yet)");
-    // Ok(()) // If returning Result
+async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions, String> {
+    let caller = ic_cdk::caller();
+    
+    // Check if the caller has an EVM address
+    if !verify_user(caller) {
+        return Err("You must generate an EVM address first".to_string());
+    }
+    
+    let permissions_id = generate_permissions_id().await;
+    let timestamp = now();
+    
+    let permissions = Permissions {
+        id: permissions_id.clone(),
+        owner: caller,
+        whitelisted_protocols: req.whitelisted_protocols,
+        whitelisted_tokens: req.whitelisted_tokens,
+        transfer_limits: req.transfer_limits,
+        created_at: timestamp,
+        updated_at: timestamp,
+    };
+    
+    PERMISSIONS_MAP.with(|map| {
+        map.borrow_mut().insert(
+            StorableString(permissions_id), 
+            StorablePermissions(permissions.clone())
+        );
+    });
+    
+    Ok(permissions)
+}
+
+#[query]
+fn get_permissions(permissions_id: String) -> Result<Permissions, String> {
+    let caller = ic_cdk::caller();
+    
+    PERMISSIONS_MAP.with(|map| {
+        map.borrow()
+            .get(&StorableString(permissions_id.clone()))
+            .map_or_else(
+                || Err(format!("Permissions with ID {} not found", permissions_id)),
+                |p| {
+                    if p.0.owner == caller {
+                        Ok(p.0)
+                    } else {
+                        Err("You do not have permission to access these permissions".to_string())
+                    }
+                }
+            )
+    })
+}
+
+#[query]
+fn get_all_permissions() -> Result<Vec<Permissions>, String> {
+    let caller = ic_cdk::caller();
+    
+    // Collect all permissions owned by the caller
+    let mut result = Vec::new();
+    
+    PERMISSIONS_MAP.with(|map| {
+        let borrowed_map = map.borrow();
+        
+        // Iterate through all permissions and filter by owner
+        for (_, permissions) in borrowed_map.iter() {
+            if permissions.0.owner == caller {
+                result.push(permissions.0.clone());
+            }
+        }
+    });
+    
+    Ok(result)
+}
+
+#[update]
+fn update_permissions(req: UpdatePermissionsRequest) -> Result<Permissions, String> {
+    let caller = ic_cdk::caller();
+    let permissions_id = req.permissions_id.clone();
+    
+    // Check if permissions exist and caller is the owner
+    if !is_permissions_owner(&permissions_id, caller) {
+        return Err(format!("Permissions with ID {} not found or you do not have permission to update them", permissions_id));
+    }
+    
+    // Get the existing permissions
+    let mut permissions = PERMISSIONS_MAP.with(|map| {
+        map.borrow()
+            .get(&StorableString(permissions_id.clone()))
+            .unwrap().0.clone()
+    });
+    
+    // Update fields if provided
+    if let Some(protocols) = req.whitelisted_protocols {
+        permissions.whitelisted_protocols = protocols;
+    }
+    
+    if let Some(tokens) = req.whitelisted_tokens {
+        permissions.whitelisted_tokens = tokens;
+    }
+    
+    if let Some(limits) = req.transfer_limits {
+        permissions.transfer_limits = limits;
+    }
+    
+    // Update the timestamp
+    permissions.updated_at = now();
+    
+    // Save the updated permissions
+    PERMISSIONS_MAP.with(|map| {
+        map.borrow_mut().insert(
+            StorableString(permissions_id), 
+            StorablePermissions(permissions.clone())
+        );
+    });
+    
+    Ok(permissions)
+}
+
+#[update]
+fn delete_permissions(permissions_id: String) -> Result<bool, String> {
+    let caller = ic_cdk::caller();
+    
+    // Check if permissions exist and caller is the owner
+    if !is_permissions_owner(&permissions_id, caller) {
+        return Err(format!("Permissions with ID {} not found or you do not have permission to delete them", permissions_id));
+    }
+    
+    // Delete the permissions
+    PERMISSIONS_MAP.with(|map| {
+        map.borrow_mut().remove(&StorableString(permissions_id));
+    });
+    
+    Ok(true)
 }
 
 // --- Lifecycle Hooks (for stable memory) ---

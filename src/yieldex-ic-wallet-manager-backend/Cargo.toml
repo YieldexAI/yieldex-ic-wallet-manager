@@ -9,10 +9,9 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-candid = "0.10"
-ic-cdk = "0.16"
+ic-cdk = "0.17"
 ic-cdk-macros = "0.9"
-ic-cdk-timers = "0.10"
+ic-cdk-timers = "0.11"
 ic-stable-structures = "0.6"
 
 # EVM / ECDSA related - Following ic-alloy README
@@ -23,6 +22,7 @@ getrandom = { version = "0.2", features = ["custom"] }
 
 # Serialization
 serde = "1.0"
+candid = "0.10.13"
 
 [profile.release]
 lto = true
