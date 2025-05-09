@@ -12,7 +12,7 @@ use alloy::signers::Signer; // The Signer trait
 use alloy::primitives::Address;
 
 // --- Configuration ---
-const KEY_NAME: &str = "dfx_test_key1"; // Используем правильное имя ключа для PocketIC
+const KEY_NAME: &str = "dfx_test_key"; // Используем ключ, доступный в PocketIC
 
 // --- Types ---
 type Memory = VirtualMemory<DefaultMemoryImpl>;
