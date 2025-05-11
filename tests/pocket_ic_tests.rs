@@ -209,8 +209,8 @@ mod tests {
                         
                         match stored_result {
                             Ok(bytes) => {
-                                let stored_address: Option<String> = Decode!(&bytes, Option<String>).expect("Failed to decode stored address");
-                                assert_eq!(stored_address, Some(address), "Stored address doesn't match generated address");
+                                let stored_address: Result<String, String> = Decode!(&bytes, Result<String, String>).expect("Failed to decode stored address");
+                                assert_eq!(stored_address, Ok(address), "Stored address doesn't match generated address");
                             },
                             Err(e) => {
                                 panic!("Get EVM address query rejected: {:?}", e);
@@ -269,12 +269,10 @@ mod tests {
             "verify_user",
             args.clone()
         );
-        
         match result {
             Ok(bytes) => {
-                let verified: bool = Decode!(&bytes, bool).expect("Failed to decode result");
-                assert_eq!(verified, false, "User should not be verified before generating an address");
-                
+                let verified: Result<bool, String> = Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert_eq!(verified, Err("User does not have an EVM address".to_string()), "User should not be verified before generating an address");
                 // Now generate an address
                 let gen_result = pic.update_call(
                     canister_id,
@@ -282,7 +280,6 @@ mod tests {
                     "generate_evm_address",
                     Encode!().unwrap()
                 );
-                
                 if gen_result.is_ok() {
                     // Check verification again after generating address
                     let verify_result = pic.query_call(
@@ -291,11 +288,10 @@ mod tests {
                         "verify_user",
                         args
                     );
-                    
                     match verify_result {
                         Ok(verify_bytes) => {
-                            let verified_after: bool = Decode!(&verify_bytes, bool).expect("Failed to decode verification result");
-                            assert_eq!(verified_after, true, "User should be verified after generating an address");
+                            let verified_after: Result<bool, String> = Decode!(&verify_bytes, Result<bool, String>).expect("Failed to decode verification result");
+                            assert_eq!(verified_after, Ok(true), "User should be verified after generating an address");
                         },
                         Err(e) => {
                             panic!("Verification query rejected: {:?}", e);
@@ -572,10 +568,9 @@ mod tests {
             Ok(bytes) => {
                 let result: Result<Permissions, String> = 
                     Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
-                
                 assert!(result.is_err(), "Should fail without EVM address");
                 let error = result.unwrap_err();
-                assert_eq!(error, "You must generate an EVM address first");
+                assert_eq!(error, "User does not have an EVM address");
             },
             Err(e) => {
                 panic!("Unexpected rejection: {:?}", e);

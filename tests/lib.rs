@@ -1,20 +1,20 @@
-// Тестирование Rust канистр на Internet Computer
+// Testing Rust canisters on Internet Computer
 // 
-// Для тестирования функции now() и API ic_cdk более надежный подход - 
-// использовать dfx deploy и проверять функцию напрямую через командную строку:
+// For testing the now() function and ic_cdk API, a more reliable approach is
+// to use dfx deploy and test the function directly via command line:
 //
 // dfx start --clean
 // dfx deploy
 // dfx canister call yieldex-ic-wallet-manager-backend now
 //
-// PocketIC имеет проблемы совместимости с последними версиями зависимостей,
-// поэтому для простого юнит-тестирования лучше использовать прямой вызов через dfx 
+// PocketIC has compatibility issues with latest dependency versions,
+// so for simple unit testing it's better to use direct dfx calls
 
-// Тестирование Rust канистр на Internet Computer с использованием PocketIC
-// 
-// Для запуска тестов необходимо:
-// 1. Установить PocketIC сервер и экспортировать переменную POCKET_IC_BIN
-// 2. Запустить тесты: cargo test -p yieldex-ic-wallet-manager-tests
+// Testing Rust canisters on Internet Computer using PocketIC
+//
+// To run the tests:
+// 1. Install PocketIC server and export POCKET_IC_BIN variable
+// 2. Run tests: cargo test -p yieldex-ic-wallet-manager-tests
 
 #[cfg(test)]
 pub mod pocket_ic_tests; 

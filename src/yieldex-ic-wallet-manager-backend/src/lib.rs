@@ -12,7 +12,7 @@ use alloy::signers::Signer; // The Signer trait
 use alloy::primitives::Address;
 
 // --- Configuration ---
-const KEY_NAME: &str = "dfx_test_key"; // Используем ключ, доступный в PocketIC
+const KEY_NAME: &str = "key_1";
 
 // --- Types ---
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -204,19 +204,25 @@ async fn generate_evm_address() -> Result<String, String> {
 }
 
 #[query]
-fn get_evm_address() -> Option<String> {
+fn get_evm_address() -> Result<String, String> {
     let user = ic_cdk::caller();
     PRINCIPAL_TO_ADDRESS_MAP.with(|map| {
         map.borrow()
             .get(&StorablePrincipal(user))
-            .map(|storable| storable.0)
+            .map(|storable| Ok(storable.0))
+            .unwrap_or_else(|| Err("EVM address not found. Please create it via generate_evm_address.".to_string()))
     })
 }
 
 #[query]
-fn verify_user(user: Principal) -> bool {
+fn verify_user(user: Principal) -> Result<bool, String> {
     // Check if the user has an address stored in the map.
-    PRINCIPAL_TO_ADDRESS_MAP.with(|map| map.borrow().contains_key(&StorablePrincipal(user)))
+    let exists = PRINCIPAL_TO_ADDRESS_MAP.with(|map| map.borrow().contains_key(&StorablePrincipal(user)));
+    if exists {
+        Ok(true)
+    } else {
+        Err("User does not have an EVM address".to_string())
+    }
 }
 
 // --- Permissions Management ---
@@ -233,15 +239,14 @@ fn is_permissions_owner(permissions_id: &str, caller: Principal) -> bool {
 #[update]
 async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions, String> {
     let caller = ic_cdk::caller();
-    
     // Check if the caller has an EVM address
-    if !verify_user(caller) {
-        return Err("You must generate an EVM address first".to_string());
+    match verify_user(caller) {
+        Ok(true) => {},
+        Ok(false) => return Err("You must generate an EVM address first".to_string()),
+        Err(e) => return Err(e),
     }
-    
     let permissions_id = generate_permissions_id().await;
     let timestamp = now();
-    
     let permissions = Permissions {
         id: permissions_id.clone(),
         owner: caller,
@@ -251,14 +256,12 @@ async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions
         created_at: timestamp,
         updated_at: timestamp,
     };
-    
     PERMISSIONS_MAP.with(|map| {
         map.borrow_mut().insert(
             StorableString(permissions_id), 
             StorablePermissions(permissions.clone())
         );
     });
-    
     Ok(permissions)
 }
 
@@ -350,18 +353,17 @@ fn update_permissions(req: UpdatePermissionsRequest) -> Result<Permissions, Stri
 #[update]
 fn delete_permissions(permissions_id: String) -> Result<bool, String> {
     let caller = ic_cdk::caller();
-    
     // Check if permissions exist and caller is the owner
     if !is_permissions_owner(&permissions_id, caller) {
         return Err(format!("Permissions with ID {} not found or you do not have permission to delete them", permissions_id));
     }
-    
     // Delete the permissions
-    PERMISSIONS_MAP.with(|map| {
-        map.borrow_mut().remove(&StorableString(permissions_id));
-    });
-    
-    Ok(true)
+    let removed = PERMISSIONS_MAP.with(|map| map.borrow_mut().remove(&StorableString(permissions_id))).is_some();
+    if removed {
+        Ok(true)
+    } else {
+        Err("Failed to delete permissions (not found)".to_string())
+    }
 }
 
 // --- Lifecycle Hooks (for stable memory) ---

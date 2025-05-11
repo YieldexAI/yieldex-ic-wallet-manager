@@ -40,11 +40,11 @@ service : {
     "generate_evm_address": () -> (variant { Ok: text; Err: text });
 
     // Returns the EVM address associated with the caller's Principal ID, if one exists.
-    "get_evm_address": () -> (opt text) query;
+    "get_evm_address": () -> (variant { Ok: text; Err: text }) query;
 
     // Verifies if a user (Principal) has an associated EVM address stored.
     // This is a query call.
-    "verify_user": (user: principal) -> (bool) query;
+    "verify_user": (user: principal) -> (variant { Ok: bool; Err: text }) query;
 
     // Permissions CRUD operations (only accessible by the Principal that owns the EVM address)
     "create_permissions": (req: CreatePermissionsRequest) -> (variant { Ok: Permissions; Err: text });
