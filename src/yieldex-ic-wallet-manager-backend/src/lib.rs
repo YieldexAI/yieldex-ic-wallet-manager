@@ -20,7 +20,12 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 // --- Permissions Types ---
 type PermissionsId = String;
 type TokenAddress = String;
-type ProtocolAddress = String;
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Protocol {
+    pub name: String,
+    pub address: String,
+}
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct TransferLimit {
@@ -29,12 +34,18 @@ pub struct TransferLimit {
     max_tx_amount: u64,
 }
 
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Token {
+    pub name: String,
+    pub address: String,
+}
+
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct Permissions {
     id: PermissionsId,
     owner: Principal,
-    whitelisted_protocols: Vec<ProtocolAddress>,
-    whitelisted_tokens: Vec<TokenAddress>,
+    whitelisted_protocols: Vec<Protocol>,
+    whitelisted_tokens: Vec<Token>,
     transfer_limits: Vec<TransferLimit>,
     created_at: u64,
     updated_at: u64,
@@ -42,16 +53,16 @@ pub struct Permissions {
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct CreatePermissionsRequest {
-    whitelisted_protocols: Vec<ProtocolAddress>,
-    whitelisted_tokens: Vec<TokenAddress>,
+    whitelisted_protocols: Vec<Protocol>,
+    whitelisted_tokens: Vec<Token>,
     transfer_limits: Vec<TransferLimit>,
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct UpdatePermissionsRequest {
     permissions_id: PermissionsId,
-    whitelisted_protocols: Option<Vec<ProtocolAddress>>,
-    whitelisted_tokens: Option<Vec<TokenAddress>>,
+    whitelisted_protocols: Option<Vec<Protocol>>,
+    whitelisted_tokens: Option<Vec<Token>>,
     transfer_limits: Option<Vec<TransferLimit>>,
 }
 

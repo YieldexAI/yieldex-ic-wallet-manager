@@ -22,16 +22,16 @@ struct TransferLimit {
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 struct CreatePermissionsRequest {
-    pub whitelisted_protocols: Vec<String>,
-    pub whitelisted_tokens: Vec<String>,
+    pub whitelisted_protocols: Vec<Protocol>,
+    pub whitelisted_tokens: Vec<Token>,
     pub transfer_limits: Vec<TransferLimit>,
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 struct UpdatePermissionsRequest {
     pub permissions_id: String,
-    pub whitelisted_protocols: Option<Vec<String>>,
-    pub whitelisted_tokens: Option<Vec<String>>,
+    pub whitelisted_protocols: Option<Vec<Protocol>>,
+    pub whitelisted_tokens: Option<Vec<Token>>,
     pub transfer_limits: Option<Vec<TransferLimit>>,
 }
 
@@ -40,11 +40,37 @@ struct UpdatePermissionsRequest {
 struct Permissions {
     pub id: String,
     pub owner: Principal,
-    pub whitelisted_protocols: Vec<String>,
-    pub whitelisted_tokens: Vec<String>,
+    pub whitelisted_protocols: Vec<Protocol>,
+    pub whitelisted_tokens: Vec<Token>,
     pub transfer_limits: Vec<TransferLimit>,
     pub created_at: u64,
     pub updated_at: u64,
+}
+
+// Example Protocol and Token for tests
+fn example_protocol() -> Protocol {
+    Protocol {
+        name: "AAVE".to_string(),
+        address: "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DdAE9".to_string(),
+    }
+}
+fn example_token() -> Token {
+    Token {
+        name: "USDT".to_string(),
+        address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
+    }
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq)]
+pub struct Protocol {
+    pub name: String,
+    pub address: String,
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq)]
+pub struct Token {
+    pub name: String,
+    pub address: String,
 }
 
 #[cfg(test)]
@@ -324,13 +350,13 @@ mod tests {
         );
         assert!(gen_result.is_ok(), "Failed to generate EVM address");
         
-        // Create a request for creating permissions with public fields
+        // Create a request for creating permissions with new Protocol and Token types
         let request = CreatePermissionsRequest {
-            whitelisted_protocols: vec!["protocol1.com".to_string(), "protocol2.com".to_string()],
-            whitelisted_tokens: vec!["0xtoken1".to_string(), "0xtoken2".to_string()],
+            whitelisted_protocols: vec![example_protocol()],
+            whitelisted_tokens: vec![example_token()],
             transfer_limits: vec![
                 TransferLimit {
-                    token_address: "0xtoken1".to_string(),
+                    token_address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
                     daily_limit: 1000,
                     max_tx_amount: 100
                 }
@@ -357,8 +383,10 @@ mod tests {
                         
                         // Check permissions data
                         assert_eq!(permissions.owner, user_principal);
-                        assert_eq!(permissions.whitelisted_protocols.len(), 2);
-                        assert_eq!(permissions.whitelisted_tokens.len(), 2);
+                        assert_eq!(permissions.whitelisted_protocols.len(), 1);
+                        assert_eq!(permissions.whitelisted_protocols[0].name, "AAVE");
+                        assert_eq!(permissions.whitelisted_tokens.len(), 1);
+                        assert_eq!(permissions.whitelisted_tokens[0].name, "USDT");
                         assert_eq!(permissions.transfer_limits.len(), 1);
                         
                         // Get permissions by ID
@@ -434,11 +462,11 @@ mod tests {
         
         // Create permissions
         let request = CreatePermissionsRequest {
-            whitelisted_protocols: vec!["protocol1.com".to_string()],
-            whitelisted_tokens: vec!["0xtoken1".to_string()],
+            whitelisted_protocols: vec![example_protocol()],
+            whitelisted_tokens: vec![example_token()],
             transfer_limits: vec![
                 TransferLimit {
-                    token_address: "0xtoken1".to_string(),
+                    token_address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
                     daily_limit: 1000,
                     max_tx_amount: 100
                 }
@@ -469,8 +497,8 @@ mod tests {
         // Update permissions
         let update_request = UpdatePermissionsRequest {
             permissions_id: permissions_id.clone(),
-            whitelisted_protocols: Some(vec!["new_protocol.com".to_string()]),
-            whitelisted_tokens: Some(vec!["0xtoken1".to_string(), "0xtoken2".to_string()]),
+            whitelisted_protocols: Some(vec![example_protocol()]),
+            whitelisted_tokens: Some(vec![example_token()]),
             transfer_limits: None
         };
         
@@ -491,8 +519,8 @@ mod tests {
                 
                 // Check that the data has been updated
                 assert_eq!(updated_permissions.id, permissions_id);
-                assert_eq!(updated_permissions.whitelisted_protocols, vec!["new_protocol.com".to_string()]);
-                assert_eq!(updated_permissions.whitelisted_tokens, vec!["0xtoken1".to_string(), "0xtoken2".to_string()]);
+                assert_eq!(updated_permissions.whitelisted_protocols, vec![example_protocol()]);
+                assert_eq!(updated_permissions.whitelisted_tokens, vec![example_token()]);
                 assert_eq!(updated_permissions.transfer_limits, permissions.transfer_limits);
                 assert!(updated_permissions.updated_at >= permissions.created_at);
                 
@@ -552,8 +580,8 @@ mod tests {
         
         // Test 1: Attempt to create permissions without EVM address
         let request = CreatePermissionsRequest {
-            whitelisted_protocols: vec!["protocol1.com".to_string()],
-            whitelisted_tokens: vec!["0xtoken1".to_string()],
+            whitelisted_protocols: vec![example_protocol()],
+            whitelisted_tokens: vec![example_token()],
             transfer_limits: vec![]
         };
         
@@ -634,7 +662,7 @@ mod tests {
         // Test 3: Attempt to update someone else's permissions
         let update_request = UpdatePermissionsRequest {
             permissions_id: permissions_id.clone(),
-            whitelisted_protocols: Some(vec!["hacker.com".to_string()]),
+            whitelisted_protocols: Some(vec![example_protocol()]),
             whitelisted_tokens: None,
             transfer_limits: None
         };
@@ -688,7 +716,7 @@ mod tests {
         let nonexistent_id = "nonexistent_id".to_string();
         let update_request = UpdatePermissionsRequest {
             permissions_id: nonexistent_id.clone(),
-            whitelisted_protocols: Some(vec!["protocol.com".to_string()]),
+            whitelisted_protocols: Some(vec![example_protocol()]),
             whitelisted_tokens: None,
             transfer_limits: None
         };

@@ -3,6 +3,19 @@
 type PermissionsId = text;
 type TokenAddress = text;
 type ProtocolAddress = text;
+
+// Protocol type definition
+type Protocol = record {
+    name: text;
+    address: text;
+};
+
+// Token type definition 
+type Token = record {
+    name: text;
+    address: text;
+};
+
 type TransferLimit = record {
     token_address: TokenAddress;
     daily_limit: nat64;
@@ -12,23 +25,23 @@ type TransferLimit = record {
 type Permissions = record {
     id: PermissionsId;
     owner: principal;
-    whitelisted_protocols: vec ProtocolAddress;
-    whitelisted_tokens: vec TokenAddress;
+    whitelisted_protocols: vec Protocol;
+    whitelisted_tokens: vec Token;
     transfer_limits: vec TransferLimit;
     created_at: nat64;
     updated_at: nat64;
 };
 
 type CreatePermissionsRequest = record {
-    whitelisted_protocols: vec ProtocolAddress;
-    whitelisted_tokens: vec TokenAddress;
+    whitelisted_protocols: vec Protocol;
+    whitelisted_tokens: vec Token;
     transfer_limits: vec TransferLimit;
 };
 
 type UpdatePermissionsRequest = record {
     permissions_id: PermissionsId;
-    whitelisted_protocols: opt vec ProtocolAddress;
-    whitelisted_tokens: opt vec TokenAddress;
+    whitelisted_protocols: opt vec Protocol;
+    whitelisted_tokens: opt vec Token;
     transfer_limits: opt vec TransferLimit;
 };
 
