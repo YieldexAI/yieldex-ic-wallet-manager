@@ -10,9 +10,22 @@ use std::cell::RefCell;
 use alloy::signers::icp::IcpSigner;
 use alloy::signers::Signer; // The Signer trait
 use alloy::primitives::Address;
+use alloy::transports::icp::{RpcApi, RpcService};
 
-// --- Configuration ---
-const KEY_NAME: &str = "key_1";
+// Services module
+mod services;
+use services::{
+    get_balance::get_balance, 
+    get_balance_link::get_balance_link, 
+    get_balance_usdc::get_balance_usdc,
+    transfer_link::{transfer_link, transfer_link_human},
+    send_eth::{send_eth, send_eth_human},
+    approve_usdc::{approve_usdc, approve_usdc_human, get_usdc_allowance, revoke_usdc_approval},
+    approve_weth::{approve_weth_for_uniswap, approve_weth, approve_weth_human, get_weth_allowance, get_weth_balance, revoke_weth_approval},
+    sign_message::{sign_message, sign_message_with_address, sign_hash},
+    wrap_eth::{wrap_eth, wrap_eth_human, unwrap_weth, unwrap_weth_human},
+    uniswap::{get_weth_usdc_quote_v3_human, approve_weth_for_universal_router_human}
+};
 
 // --- Types ---
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -191,13 +204,7 @@ async fn generate_evm_address() -> Result<String, String> {
     ic_cdk::println!("Address not found for principal {}, generating...", user);
 
     // 2. Generate new address using IcpSigner
-    let derivation_path = vec![user.as_slice().to_vec()];
-
-    // Create the ICP Signer. Pass derivation path, key name string, and chain ID (None for address gen)
-    // Handle potential errors during signer creation (e.g., if management canister call fails)
-    let signer = IcpSigner::new(derivation_path, KEY_NAME, None)
-        .await
-        .map_err(|e| format!("Failed to create ICP signer: {}", e))?;
+    let signer = create_icp_signer().await?;
 
     // Get the address from the signer
     let address: Address = signer.address();
@@ -375,6 +382,218 @@ fn delete_permissions(permissions_id: String) -> Result<bool, String> {
     } else {
         Err("Failed to delete permissions (not found)".to_string())
     }
+}
+
+// --- Balance Service Methods ---
+
+/// Get ETH balance for an address (or current user's address if none provided)
+#[update]
+async fn get_eth_balance(address: Option<String>) -> Result<String, String> {
+    get_balance(address).await
+}
+
+/// Get USDC balance for an address (or current user's address if none provided)
+#[update]
+async fn get_usdc_balance(address: Option<String>) -> Result<String, String> {
+    get_balance_usdc(address).await
+}
+
+/// Get LINK balance for an address (or current user's address if none provided)
+#[update]
+async fn get_link_balance(address: Option<String>) -> Result<String, String> {
+    get_balance_link(address).await
+}
+
+// --- Transfer Service Methods ---
+
+/// Transfer LINK tokens to a specified address
+/// Amount should be in Wei format (18 decimals for LINK)
+#[update]
+async fn transfer_link_tokens(to_address: String, amount: String) -> Result<String, String> {
+    transfer_link(to_address, amount).await
+}
+
+/// Transfer LINK tokens with human-readable amount (e.g. "1.5" for 1.5 LINK)
+#[update]  
+async fn transfer_link_human_readable(to_address: String, amount_human: String) -> Result<String, String> {
+    transfer_link_human(to_address, amount_human).await
+}
+
+/// Send ETH to a specified address
+/// Amount should be in Wei format (18 decimals for ETH)
+#[update]
+async fn send_eth_tokens(to_address: String, amount_wei: String) -> Result<String, String> {
+    send_eth(to_address, amount_wei).await
+}
+
+/// Send ETH with human-readable amount (e.g. "0.001" for 0.001 ETH)
+#[update]
+async fn send_eth_human_readable(to_address: String, amount_ether: String) -> Result<String, String> {
+    send_eth_human(to_address, amount_ether).await
+}
+
+// --- Approve Service Methods ---
+
+/// Approve USDC spending for a spender address
+/// Amount should be in USDC units (6 decimals)
+#[update]
+async fn approve_usdc_spending(spender_address: String, amount: String) -> Result<String, String> {
+    approve_usdc(spender_address, amount).await
+}
+
+/// Approve USDC spending with human-readable amount (e.g. "100.50" for 100.50 USDC)
+#[update]
+async fn approve_usdc_human_readable(spender_address: String, amount_human: String) -> Result<String, String> {
+    approve_usdc_human(spender_address, amount_human).await
+}
+
+/// Get current USDC allowance for a spender
+#[update]
+async fn get_usdc_allowance_info(owner_address: Option<String>, spender_address: String) -> Result<String, String> {
+    get_usdc_allowance(owner_address, spender_address).await
+}
+
+/// Revoke USDC approval (set allowance to 0)
+#[update]
+async fn revoke_usdc_spending_approval(spender_address: String) -> Result<String, String> {
+    revoke_usdc_approval(spender_address).await
+}
+
+// --- Message Signing Methods ---
+
+/// Sign an arbitrary message using threshold ECDSA
+#[update]
+async fn sign_arbitrary_message(message: String) -> Result<String, String> {
+    sign_message(message).await
+}
+
+/// Sign a message and return both signature and signer address
+#[update]
+async fn sign_message_with_signer_address(message: String) -> Result<String, String> {
+    sign_message_with_address(message).await
+}
+
+/// Sign a 32-byte hash directly
+#[update]
+async fn sign_32_byte_hash(hash_hex: String) -> Result<String, String> {
+    sign_hash(hash_hex).await
+}
+
+// --- WETH Approve Service Methods ---
+
+/// Get WETH balance
+#[update]
+async fn get_weth_token_balance(address: Option<String>) -> Result<String, String> {
+    get_weth_balance(address).await
+}
+
+/// Approve WETH spending for Uniswap V2 Router (simplified)
+#[update]
+async fn approve_weth_for_uniswap_trading(amount: String) -> Result<String, String> {
+    approve_weth_for_uniswap(amount).await
+}
+
+/// Approve WETH spending for any address
+#[update]
+async fn approve_weth_spending(spender_address: String, amount: String) -> Result<String, String> {
+    approve_weth(spender_address, amount).await
+}
+
+/// Approve WETH spending with human-readable amount (e.g. "1.5" for 1.5 WETH)
+#[update]
+async fn approve_weth_human_readable(spender_address: String, amount_human: String) -> Result<String, String> {
+    approve_weth_human(spender_address, amount_human).await
+}
+
+/// Get current WETH allowance for a spender
+#[update]
+async fn get_weth_allowance_info(owner_address: Option<String>, spender_address: String) -> Result<String, String> {
+    get_weth_allowance(owner_address, spender_address).await
+}
+
+/// Revoke WETH approval (set allowance to 0)
+#[update]
+async fn revoke_weth_spending_approval(spender_address: String) -> Result<String, String> {
+    revoke_weth_approval(spender_address).await
+}
+
+// --- WETH Wrapping/Unwrapping Methods ---
+
+/// Wrap ETH into WETH tokens by depositing ETH
+/// Amount should be in Wei format (18 decimals for ETH)
+#[update]
+async fn wrap_eth_tokens(amount: String) -> Result<String, String> {
+    wrap_eth(amount).await
+}
+
+/// Wrap ETH with human-readable amount (e.g. "0.1" for 0.1 ETH)
+#[update]
+async fn wrap_eth_human_readable(amount_human: String) -> Result<String, String> {
+    wrap_eth_human(amount_human).await
+}
+
+/// Unwrap WETH back to ETH by withdrawing from WETH contract
+/// Amount should be in Wei format (18 decimals for WETH)
+#[update]
+async fn unwrap_weth_tokens(amount: String) -> Result<String, String> {
+    unwrap_weth(amount).await
+}
+
+/// Unwrap WETH with human-readable amount (e.g. "0.1" for 0.1 WETH)
+#[update]
+async fn unwrap_weth_human_readable(amount_human: String) -> Result<String, String> {
+    unwrap_weth_human(amount_human).await
+}
+
+/// Get WETH balance for wrap/unwrap operations
+#[update]
+async fn get_weth_balance_for_wrapping(address: Option<String>) -> Result<String, String> {
+    get_weth_balance(address).await
+}
+
+// --- Uniswap Service Methods ---
+
+/// Get estimated quote for WETH → USDC swap
+#[update]
+async fn get_weth_usdc_quote_human_readable(weth_amount_human: String) -> Result<String, String> {
+    get_weth_usdc_quote_v3_human(weth_amount_human).await
+}
+
+/// Approve Universal Router to spend WETH for Uniswap V3 swaps
+#[update]
+async fn approve_weth_for_uniswap_v3(amount_human: String) -> Result<String, String> {
+    approve_weth_for_universal_router_human(amount_human).await
+}
+
+// --- RPC Service Configuration ---
+
+fn get_rpc_service_sepolia() -> RpcService {
+    // Using a custom RPC proxy for Sepolia testnet
+    // Note: This is a demo proxy, use your own RPC endpoint in production
+    RpcService::Custom(RpcApi {
+        url: "https://ic-alloy-evm-rpc-proxy.kristofer-977.workers.dev/eth-sepolia".to_string(),
+        headers: None,
+    })
+}
+
+fn get_ecdsa_key_name() -> String {
+    #[allow(clippy::option_env_unwrap)]
+    let dfx_network = option_env!("DFX_NETWORK").unwrap_or("local");
+    match dfx_network {
+        "local" => "dfx_test_key".to_string(),
+        "ic" => "key_1".to_string(),
+        _ => "dfx_test_key".to_string(), // Default fallback
+    }
+}
+
+async fn create_icp_signer() -> Result<IcpSigner, String> {
+    let user = ic_cdk::caller();
+    let derivation_path = vec![user.as_slice().to_vec()];
+    let ecdsa_key_name = get_ecdsa_key_name();
+    
+    IcpSigner::new(derivation_path, &ecdsa_key_name, None)
+        .await
+        .map_err(|e| format!("Failed to create ICP signer: {}", e))
 }
 
 // --- Lifecycle Hooks (for stable memory) ---

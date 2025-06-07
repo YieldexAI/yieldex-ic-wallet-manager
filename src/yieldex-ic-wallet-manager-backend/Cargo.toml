@@ -15,7 +15,7 @@ ic-cdk-timers = "0.11"
 ic-stable-structures = "0.6"
 
 # EVM / ECDSA related - Following ic-alloy README
-alloy = { git = "https://github.com/ic-alloy/ic-alloy.git", tag = "v0.3.5-icp.0", default-features = false, features = ["icp", "signers"] }
+alloy = { git = "https://github.com/ic-alloy/ic-alloy.git", tag = "v0.3.5-icp.0", default-features = false, features = ["icp", "signers", "contract", "providers"] }
 ethers-core = { version = "2.0", default-features = false }
 hex = "0.4"
 getrandom = { version = "0.2", features = ["custom"] }

@@ -4,16 +4,6 @@
       "candid": "src/yieldex-ic-wallet-manager-backend/yieldex-ic-wallet-manager-backend.did",
       "package": "yieldex-ic-wallet-manager-backend",
       "type": "rust"
-    },
-    "yieldex-ic-wallet-manager-frontend": {
-      "dependencies": [
-        "yieldex-ic-wallet-manager-backend"
-      ],
-      "source": [
-        "src/yieldex-ic-wallet-manager-frontend/dist"
-      ],
-      "type": "assets",
-      "workspace": "yieldex-ic-wallet-manager-frontend"
     }
   },
   "defaults": {

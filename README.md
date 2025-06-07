@@ -54,6 +54,20 @@ RUST_BACKTRACE=1 cargo test -- --nocapture
 
 You can change the test principal IDs in `pocket_ic_tests.rs` to simulate different users.
 
+## API Methods
+
+### EVM Address Management
+- `generate_evm_address()`: Generate and store EVM address for caller
+- `get_evm_address()`: Get stored EVM address for caller
+- `verify_user(principal)`: Check if user has an EVM address
+
+### Permissions Management
+- `create_permissions(request)`: Create new permissions set
+- `get_permissions(id)`: Get permissions by ID
+- `get_all_permissions()`: Get all permissions for caller
+- `update_permissions(request)`: Update existing permissions
+- `delete_permissions(id)`: Delete permissions
+
 ## Notes
 - The canister uses the ECDSA key name `dfx_test_key` for compatibility with PocketIC's II subnet.
 - All test structures are defined in the test file for compatibility with Candid serialization.
@@ -64,3 +78,4 @@ You can change the test principal IDs in `pocket_ic_tests.rs` to simulate differ
 - [PocketIC Rust Testing](https://github.com/dfinity/ic/tree/master/packages/pocket-ic)
 - [ic-cdk](https://docs.rs/ic-cdk)
 - [Candid](https://internetcomputer.org/docs/current/developer-docs/backend/candid/)
+- [ic-alloy for EVM integration](https://github.com/ic-alloy/ic-alloy)

@@ -65,4 +65,68 @@ service : {
     "get_all_permissions": () -> (variant { Ok: vec Permissions; Err: text }) query;
     "update_permissions": (req: UpdatePermissionsRequest) -> (variant { Ok: Permissions; Err: text });
     "delete_permissions": (permissions_id: PermissionsId) -> (variant { Ok: bool; Err: text });
+
+    // Get balance of an ETH account
+    "get_eth_balance": (address: opt text) -> (variant { Ok: text; Err: text });
+
+    // Get balance of a USDC account
+    "get_usdc_balance": (address: opt text) -> (variant { Ok: text; Err: text });
+
+    // Get balance of a LINK account
+    "get_link_balance": (address: opt text) -> (variant { Ok: text; Err: text });
+
+    // Transfer LINK tokens to a specified address
+    "transfer_link_tokens": (to_address: text, amount: text) -> (variant { Ok: text; Err: text });
+
+    // Transfer LINK tokens with human-readable amount (e.g. "1.5" for 1.5 LINK)
+    "transfer_link_human_readable": (to_address: text, amount_human: text) -> (variant { Ok: text; Err: text });
+
+    // Send ETH to a specified address
+    "send_eth_tokens": (to_address: text, amount_wei: text) -> (variant { Ok: text; Err: text });
+
+    // Send ETH with human-readable amount (e.g. "0.001" for 0.001 ETH)
+    "send_eth_human_readable": (to_address: text, amount_ether: text) -> (variant { Ok: text; Err: text });
+
+    // Approve USDC for a spender
+    "approve_usdc": (spender_address: text, amount: text) -> (variant { Ok: text; Err: text });
+
+    // Revoke approval for a spender
+    "revoke_usdc_approval": (spender_address: text) -> (variant { Ok: text; Err: text });
+
+    // Get allowance of USDC for a spender
+    "get_usdc_allowance": (spender_address: text) -> (variant { Ok: text; Err: text });
+
+    // Get balance of a WETH account
+    "get_weth_balance": (address: opt text) -> (variant { Ok: text; Err: text });
+
+    // Approve WETH for a spender
+    "approve_weth": (spender_address: text, amount: text) -> (variant { Ok: text; Err: text });
+
+    // Approve WETH for a spender with human-readable amount (e.g. "0.001" for 0.001 WETH)
+    "approve_weth_human_readable": (spender_address: text, amount_human: text) -> (variant { Ok: text; Err: text });
+
+    // Revoke approval for a spender
+    "revoke_weth_approval": (spender_address: text) -> (variant { Ok: text; Err: text });
+
+    // Get allowance of WETH for a spender
+    "get_weth_allowance": (spender_address: text) -> (variant { Ok: text; Err: text });
+
+    // Approve WETH for Uniswap
+    "approve_weth_for_uniswap": (amount: text) -> (variant { Ok: text; Err: text });
+
+    // Wrap ETH into WETH tokens
+    "wrap_eth_tokens": (amount: text) -> (variant { Ok: text; Err: text });
+
+    // Wrap ETH with human-readable amount (e.g. "0.1" for 0.1 ETH)
+    "wrap_eth_human_readable": (amount_human: text) -> (variant { Ok: text; Err: text });
+
+    // Unwrap WETH back to ETH
+    "unwrap_weth_tokens": (amount: text) -> (variant { Ok: text; Err: text });
+
+    // Get balance of a WETH account for wrapping
+    "get_weth_balance_for_wrapping": (address: opt text) -> (variant { Ok: text; Err: text });
+
+    // Unwrap WETH with human-readable amount (e.g. "0.1" for 0.1 WETH)
+    "unwrap_weth_human_readable": (amount_human: text) -> (variant { Ok: text; Err: text });
+
 }
