@@ -32,7 +32,7 @@ pub async fn get_balance_link(address: Option<String>) -> Result<String, String>
     let provider = ProviderBuilder::new().on_icp(config);
 
     let contract = LINK::new(
-        address!("779877A7B0D9E8603169DdbD7836e478b4624789"),
+        address!("f8fb3713d459d7c1018bd0a49d19b4c44290ebe5"),
         provider,
     );
 
