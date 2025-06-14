@@ -22,12 +22,23 @@ type TransferLimit = record {
     max_tx_amount: nat64;
 };
 
+// 🆕 Protocol Permission type for AAVE integration (Sprint 2)
+type ProtocolPermission = record {
+    protocol_address: text;
+    allowed_functions: vec text;
+    max_amount_per_tx: opt nat64;
+    daily_limit: opt nat64;
+    total_used_today: nat64;
+    last_reset_date: nat64;
+};
+
 type Permissions = record {
     id: PermissionsId;
     owner: principal;
     whitelisted_protocols: vec Protocol;
     whitelisted_tokens: vec Token;
     transfer_limits: vec TransferLimit;
+    protocol_permissions: vec ProtocolPermission; // 🆕 Protocol permissions for AAVE integration
     created_at: nat64;
     updated_at: nat64;
 };
@@ -66,6 +77,11 @@ service : {
     "update_permissions": (req: UpdatePermissionsRequest) -> (variant { Ok: Permissions; Err: text });
     "delete_permissions": (permissions_id: PermissionsId) -> (variant { Ok: bool; Err: text });
 
+    // 🆕 Protocol permission management (Sprint 2)
+    "check_protocol_permission": (permissions_id: text, protocol_address: text, function_name: text, amount: nat64) -> (variant { Ok: bool; Err: text }) query;
+    "update_protocol_permission": (permissions_id: text, protocol_permission: ProtocolPermission) -> (variant { Ok: bool; Err: text });
+    "update_daily_usage": (permissions_id: text, protocol_address: text, amount_used: nat64) -> (variant { Ok: bool; Err: text });
+
     // Get balance of an ETH account
     "get_eth_balance": (address: opt text) -> (variant { Ok: text; Err: text });
 
@@ -88,31 +104,34 @@ service : {
     "send_eth_human_readable": (to_address: text, amount_ether: text) -> (variant { Ok: text; Err: text });
 
     // Approve USDC for a spender
-    "approve_usdc": (spender_address: text, amount: text) -> (variant { Ok: text; Err: text });
+    "approve_usdc_spending": (spender_address: text, amount: text) -> (variant { Ok: text; Err: text });
 
-    // Revoke approval for a spender
-    "revoke_usdc_approval": (spender_address: text) -> (variant { Ok: text; Err: text });
+    // Approve USDC spending with human-readable amount (e.g. "100.50" for 100.50 USDC)
+    "approve_usdc_human_readable": (spender_address: text, amount_human: text) -> (variant { Ok: text; Err: text });
 
-    // Get allowance of USDC for a spender
-    "get_usdc_allowance": (spender_address: text) -> (variant { Ok: text; Err: text });
+    // Get current USDC allowance for a spender
+    "get_usdc_allowance_info": (owner_address: opt text, spender_address: text) -> (variant { Ok: text; Err: text });
+
+    // Revoke USDC approval (set allowance to 0)
+    "revoke_usdc_spending_approval": (spender_address: text) -> (variant { Ok: text; Err: text });
 
     // Get balance of a WETH account
     "get_weth_balance": (address: opt text) -> (variant { Ok: text; Err: text });
 
-    // Approve WETH for a spender
-    "approve_weth": (spender_address: text, amount: text) -> (variant { Ok: text; Err: text });
+    // Approve WETH for Uniswap V2 Router (simplified)
+    "approve_weth_for_uniswap_trading": (amount: text) -> (variant { Ok: text; Err: text });
 
-    // Approve WETH for a spender with human-readable amount (e.g. "0.001" for 0.001 WETH)
+    // Approve WETH spending for any address
+    "approve_weth_spending": (spender_address: text, amount: text) -> (variant { Ok: text; Err: text });
+
+    // Approve WETH spending with human-readable amount (e.g. "1.5" for 1.5 WETH)
     "approve_weth_human_readable": (spender_address: text, amount_human: text) -> (variant { Ok: text; Err: text });
 
-    // Revoke approval for a spender
-    "revoke_weth_approval": (spender_address: text) -> (variant { Ok: text; Err: text });
+    // Get current WETH allowance for a spender
+    "get_weth_allowance_info": (owner_address: opt text, spender_address: text) -> (variant { Ok: text; Err: text });
 
-    // Get allowance of WETH for a spender
-    "get_weth_allowance": (spender_address: text) -> (variant { Ok: text; Err: text });
-
-    // Approve WETH for Uniswap
-    "approve_weth_for_uniswap": (amount: text) -> (variant { Ok: text; Err: text });
+    // Revoke WETH approval (set allowance to 0)
+    "revoke_weth_spending_approval": (spender_address: text) -> (variant { Ok: text; Err: text });
 
     // Wrap ETH into WETH tokens
     "wrap_eth_tokens": (amount: text) -> (variant { Ok: text; Err: text });
@@ -128,5 +147,21 @@ service : {
 
     // Unwrap WETH with human-readable amount (e.g. "0.1" for 0.1 WETH)
     "unwrap_weth_human_readable": (amount_human: text) -> (variant { Ok: text; Err: text });
+
+    // --- Message Signing Methods ---
+
+    // Sign an arbitrary message using threshold ECDSA
+    "sign_arbitrary_message": (message: text) -> (variant { Ok: text; Err: text });
+
+    // Sign a message and return both signature and signer address
+    "sign_message_with_signer_address": (message: text) -> (variant { Ok: text; Err: text });
+
+    // Sign a 32-byte hash directly
+    "sign_32_byte_hash": (hash_hex: text) -> (variant { Ok: text; Err: text });
+
+    // 🆕 AAVE operations (Sprint 2)
+    "get_aave_link_user_balance": (address: opt text) -> (variant { Ok: text; Err: text });
+    "supply_link_to_aave_secured": (amount_human: text, permissions_id: text) -> (variant { Ok: text; Err: text });
+    "withdraw_link_from_aave_secured": (amount_human: text, permissions_id: text) -> (variant { Ok: text; Err: text });
 
 }

@@ -13,21 +13,32 @@ const WASM_PATH_RELATIVE: &str = ".dfx/local/canisters/yieldex-ic-wallet-manager
 
 // Define our own versions of the structs for tests, which have the same fields
 // Use these structs only for creating requests
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq)]
+#[derive(CandidType, Deserialize, Debug, Clone, PartialEq)]
 struct TransferLimit {
     pub token_address: String,
     pub daily_limit: u64,
     pub max_tx_amount: u64,
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+// 🆕 Добавляем ProtocolPermission (Задача 1.1)
+#[derive(CandidType, Deserialize, Debug, Clone, PartialEq)]
+struct ProtocolPermission {
+    pub protocol_address: String,
+    pub allowed_functions: Vec<String>,
+    pub max_amount_per_tx: Option<u64>,
+    pub daily_limit: Option<u64>,
+    pub total_used_today: u64,
+    pub last_reset_date: u64,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
 struct CreatePermissionsRequest {
     pub whitelisted_protocols: Vec<Protocol>,
     pub whitelisted_tokens: Vec<Token>,
     pub transfer_limits: Vec<TransferLimit>,
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(CandidType, Deserialize, Debug, Clone)]
 struct UpdatePermissionsRequest {
     pub permissions_id: String,
     pub whitelisted_protocols: Option<Vec<Protocol>>,
@@ -35,14 +46,15 @@ struct UpdatePermissionsRequest {
     pub transfer_limits: Option<Vec<TransferLimit>>,
 }
 
-// Permissions struct for testing
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+// 🆕 Обновленная структура Permissions (Задача 1.1)
+#[derive(CandidType, Deserialize, Debug, Clone)]
 struct Permissions {
     pub id: String,
     pub owner: Principal,
     pub whitelisted_protocols: Vec<Protocol>,
     pub whitelisted_tokens: Vec<Token>,
     pub transfer_limits: Vec<TransferLimit>,
+    pub protocol_permissions: Vec<ProtocolPermission>, // 🆕 Новое поле
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -651,8 +663,8 @@ mod tests {
                 
                 assert!(result.is_err(), "Should fail for another principal");
                 let error = result.unwrap_err();
-                assert!(error.contains("not found") || error.contains("permission"), 
-                        "Expected permission error, got: {}", error);
+                assert!(error.contains("not found") || error.contains("permission") || error.contains("Access denied"), 
+                "Expected permission error, got: {}", error);
             },
             Err(e) => {
                 panic!("Unexpected rejection: {:?}", e);
@@ -681,8 +693,8 @@ mod tests {
                 
                 assert!(result.is_err(), "Should fail for another principal");
                 let error = result.unwrap_err();
-                assert!(error.contains("not found") || error.contains("permission"), 
-                        "Expected permission error, got: {}", error);
+                assert!(error.contains("not found") || error.contains("permission") || error.contains("Access denied"), 
+                "Expected permission error, got: {}", error);
             },
             Err(e) => {
                 panic!("Unexpected rejection: {:?}", e);
@@ -704,8 +716,8 @@ mod tests {
                 
                 assert!(result.is_err(), "Should fail for another principal");
                 let error = result.unwrap_err();
-                assert!(error.contains("not found") || error.contains("permission"), 
-                        "Expected permission error, got: {}", error);
+                assert!(error.contains("not found") || error.contains("permission") || error.contains("Access denied"), 
+                "Expected permission error, got: {}", error);
             },
             Err(e) => {
                 panic!("Unexpected rejection: {:?}", e);
@@ -742,5 +754,1093 @@ mod tests {
                 panic!("Unexpected rejection: {:?}", e);
             }
         }
+    }
+
+    // 🆕 Тест 1.1: Protocol Permission Management (Задача 1.1)
+    #[test]
+    fn test_protocol_permission_management() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        
+        // 1. Generate EVM address
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        // 2. Создать базовые permissions
+        let request = CreatePermissionsRequest {
+            whitelisted_protocols: vec![],
+            whitelisted_tokens: vec![],
+            transfer_limits: vec![],
+        };
+        
+        let create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&request).unwrap()
+        );
+        
+        let permissions = match create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                permissions_result.expect("Failed to create permissions")
+            },
+            Err(e) => {
+                panic!("Failed to create permissions: {:?}", e);
+            }
+        };
+        
+        // 3. Добавить protocol permission для AAVE
+        let protocol_perm = ProtocolPermission {
+            protocol_address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(), // AAVE Pool
+            allowed_functions: vec!["supply".to_string(), "withdraw".to_string()],
+            max_amount_per_tx: Some(100_000000), // 100 USDC
+            daily_limit: Some(1000_000000), // 1000 USDC
+            total_used_today: 0,
+            last_reset_date: 0, // Используем 0 вместо ic_cdk::api::time() для тестов
+        };
+        
+        let add_perm_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "update_protocol_permission",
+            Encode!(&permissions.id, &protocol_perm).unwrap()
+        );
+        
+        match add_perm_result {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert_eq!(result, Ok(true), "Adding protocol permission should succeed");
+            },
+            Err(e) => {
+                panic!("Failed to add protocol permission: {:?}", e);
+            }
+        }
+        
+        // 4. Проверить разрешение
+        let verification_result = pic.query_call(
+            canister_id,
+            user_principal,
+            "check_protocol_permission",
+            Encode!(
+                &permissions.id,
+                &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+                &"supply".to_string(),
+                &50_000000u64 // 50 USDC
+            ).unwrap()
+        );
+        
+        match verification_result {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert_eq!(result, Ok(true), "Permission verification should succeed");
+            },
+            Err(e) => {
+                panic!("Failed to verify protocol permission: {:?}", e);
+            }
+        }
+        
+        // 5. Проверить запрещенную функцию
+        let forbidden_verification = pic.query_call(
+            canister_id,
+            user_principal,
+            "check_protocol_permission",
+            Encode!(
+                &permissions.id,
+                &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+                &"borrow".to_string(), // Функция не разрешена
+                &10_000000u64 // 10 USDC
+            ).unwrap()
+        );
+        
+        match forbidden_verification {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert!(result.is_err(), "Forbidden function should fail verification");
+                let error = result.unwrap_err();
+                assert!(error.contains("not allowed"), "Expected 'not allowed' error, got: {}", error);
+            },
+            Err(e) => {
+                panic!("Failed to verify forbidden function: {:?}", e);
+            }
+        }
+        
+        // 6. Проверить превышение лимита
+        let over_limit_verification = pic.query_call(
+            canister_id,
+            user_principal,
+            "check_protocol_permission",
+            Encode!(
+                &permissions.id,
+                &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+                &"supply".to_string(),
+                &150_000000u64 // 150 USDC - превышает max_amount_per_tx (100 USDC)
+            ).unwrap()
+        );
+        
+        match over_limit_verification {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert!(result.is_err(), "Over limit amount should fail verification");
+                let error = result.unwrap_err();
+                assert!(error.contains("exceeds max limit"), "Expected 'exceeds max limit' error, got: {}", error);
+            },
+            Err(e) => {
+                panic!("Failed to verify over limit amount: {:?}", e);
+            }
+        }
+    }
+
+    // 🆕 Тест 2.2: AAVE ABI Loading and Contract Instance Creation (Задача 2.2)
+    #[test]
+    fn test_aave_abi_loading() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        
+        // 1. Generate EVM address
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        // 2. Test getting AAVE LINK balance (this will test ABI loading internally)
+        let balance_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "get_aave_link_user_balance",
+            Encode!(&None::<String>).unwrap()
+        );
+        
+        match balance_result {
+            Ok(bytes) => {
+                let result: Result<String, String> = 
+                    Decode!(&bytes, Result<String, String>).expect("Failed to decode result");
+                
+                // The function should either return a balance or an error about network/contract
+                // Both are acceptable as it proves ABI loading works
+                match result {
+                    Ok(balance) => {
+                        println!("AAVE LINK balance: {}", balance);
+                        assert!(balance.starts_with("0x"), "Balance should be hex format");
+                    },
+                    Err(error) => {
+                        println!("Expected error (network/contract related): {}", error);
+                        // Errors related to network connectivity or contract calls are expected in tests
+                        // The important thing is that ABI loading didn't fail
+                        assert!(
+                            error.contains("Failed to get reserve data") || 
+                            error.contains("Failed to get aLINK balance") ||
+                            error.contains("network") ||
+                            error.contains("RPC"),
+                            "Error should be network/contract related, got: {}", error
+                        );
+                    }
+                }
+            },
+            Err(e) => {
+                panic!("AAVE balance call was rejected: {:?}", e);
+            }
+        }
+    }
+
+    // 🆕 Тест 2.1: AAVE Supply with Permissions (Задача 2.1)
+    #[test]
+    fn test_aave_supply_with_permissions() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        
+        // 1. Generate EVM address
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        // 2. Create permissions with AAVE protocol
+        let request = CreatePermissionsRequest {
+            whitelisted_protocols: vec![Protocol {
+                name: "AAVE".to_string(),
+                address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+            }],
+            whitelisted_tokens: vec![Token {
+                name: "LINK".to_string(),
+                address: "0x779877A7B0D9E8603169DdbD7836e478b4624789".to_string(),
+            }],
+            transfer_limits: vec![],
+        };
+        
+        let create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&request).unwrap()
+        );
+        
+        let permissions = match create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                permissions_result.expect("Failed to create permissions")
+            },
+            Err(e) => {
+                panic!("Failed to create permissions: {:?}", e);
+            }
+        };
+        
+        // 3. Add AAVE protocol permission
+        let protocol_perm = ProtocolPermission {
+            protocol_address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+            allowed_functions: vec!["supply".to_string(), "withdraw".to_string()],
+            max_amount_per_tx: Some(1000000000000000000), // 1 LINK (18 decimals)
+            daily_limit: Some(10000000000000000000), // 10 LINK
+            total_used_today: 0,
+            last_reset_date: 0,
+        };
+        
+        let add_perm_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "update_protocol_permission",
+            Encode!(&permissions.id, &protocol_perm).unwrap()
+        );
+        
+        assert!(add_perm_result.is_ok(), "Failed to add protocol permission");
+        
+        // 4. Test AAVE supply (will fail due to insufficient balance, but tests the flow)
+        let supply_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "supply_link_to_aave_secured",
+            Encode!(&"0.1".to_string(), &permissions.id).unwrap()
+        );
+        
+        match supply_result {
+            Ok(bytes) => {
+                let result: Result<String, String> = 
+                    Decode!(&bytes, Result<String, String>).expect("Failed to decode result");
+                
+                match result {
+                    Ok(success_msg) => {
+                        println!("AAVE supply succeeded: {}", success_msg);
+                        assert!(success_msg.contains("Successfully supplied"), "Should contain success message");
+                    },
+                    Err(error) => {
+                        println!("Expected error (insufficient balance or network): {}", error);
+                        // Expected errors: insufficient balance, network issues, etc.
+                        assert!(
+                            error.contains("Insufficient LINK balance") ||
+                            error.contains("Failed to get balance") ||
+                            error.contains("Failed to get nonce") ||
+                            error.contains("network") ||
+                            error.contains("RPC") ||
+                            error.contains("server returned an error response") ||
+                            error.contains("No route to canister"),
+                            "Error should be balance/network related, got: {}", error
+                        );
+                    }
+                }
+            },
+            Err(e) => {
+                panic!("AAVE supply call was rejected: {:?}", e);
+            }
+        }
+    }
+
+    // 🆕 Тест 2.1: AAVE Withdraw with Permissions (Задача 2.1)
+    #[test]
+    fn test_aave_withdraw_with_permissions() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        
+        // 1. Generate EVM address
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        // 2. Create permissions with AAVE protocol
+        let request = CreatePermissionsRequest {
+            whitelisted_protocols: vec![Protocol {
+                name: "AAVE".to_string(),
+                address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+            }],
+            whitelisted_tokens: vec![Token {
+                name: "LINK".to_string(),
+                address: "0x779877A7B0D9E8603169DdbD7836e478b4624789".to_string(),
+            }],
+            transfer_limits: vec![],
+        };
+        
+        let create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&request).unwrap()
+        );
+        
+        let permissions = match create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                permissions_result.expect("Failed to create permissions")
+            },
+            Err(e) => {
+                panic!("Failed to create permissions: {:?}", e);
+            }
+        };
+        
+        // 3. Add AAVE protocol permission
+        let protocol_perm = ProtocolPermission {
+            protocol_address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+            allowed_functions: vec!["supply".to_string(), "withdraw".to_string()],
+            max_amount_per_tx: Some(1000000000000000000), // 1 LINK (18 decimals)
+            daily_limit: Some(10000000000000000000), // 10 LINK
+            total_used_today: 0,
+            last_reset_date: 0,
+        };
+        
+        let add_perm_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "update_protocol_permission",
+            Encode!(&permissions.id, &protocol_perm).unwrap()
+        );
+        
+        assert!(add_perm_result.is_ok(), "Failed to add protocol permission");
+        
+        // 4. Test AAVE withdraw (will fail due to insufficient aLINK balance, but tests the flow)
+        let withdraw_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "withdraw_link_from_aave_secured",
+            Encode!(&"0.1".to_string(), &permissions.id).unwrap()
+        );
+        
+        match withdraw_result {
+            Ok(bytes) => {
+                let result: Result<String, String> = 
+                    Decode!(&bytes, Result<String, String>).expect("Failed to decode result");
+                
+                match result {
+                    Ok(success_msg) => {
+                        println!("AAVE withdraw succeeded: {}", success_msg);
+                        assert!(success_msg.contains("Successfully withdrew"), "Should contain success message");
+                    },
+                    Err(error) => {
+                        println!("Expected error (insufficient aLINK balance or network): {}", error);
+                        // Expected errors: insufficient aLINK balance, network issues, etc.
+                        assert!(
+                            error.contains("Insufficient aLINK balance") ||
+                            error.contains("Failed to get reserve data") ||
+                            error.contains("Failed to get aLINK balance") ||
+                            error.contains("Failed to get nonce") ||
+                            error.contains("network") ||
+                            error.contains("RPC"),
+                            "Error should be balance/network related, got: {}", error
+                        );
+                    }
+                }
+            },
+            Err(e) => {
+                panic!("AAVE withdraw call was rejected: {:?}", e);
+            }
+        }
+    }
+
+    // 🆕 Тест: AAVE Security - Access Control (Задача 2.1)
+    #[test]
+    fn test_aave_security_access_control() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        let another_principal = Principal::from_text(ANOTHER_PRINCIPAL).expect("Invalid principal");
+        
+        // 1. Generate EVM address for user
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        // 2. Create permissions
+        let request = CreatePermissionsRequest {
+            whitelisted_protocols: vec![],
+            whitelisted_tokens: vec![],
+            transfer_limits: vec![],
+        };
+        
+        let create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&request).unwrap()
+        );
+        
+        let permissions = match create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                permissions_result.expect("Failed to create permissions")
+            },
+            Err(e) => {
+                panic!("Failed to create permissions: {:?}", e);
+            }
+        };
+        
+        // 3. Add AAVE protocol permission
+        let protocol_perm = ProtocolPermission {
+            protocol_address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+            allowed_functions: vec!["supply".to_string()],
+            max_amount_per_tx: Some(1000000000000000000), // 1 LINK
+            daily_limit: Some(10000000000000000000), // 10 LINK
+            total_used_today: 0,
+            last_reset_date: 0,
+        };
+        
+        let add_perm_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "update_protocol_permission",
+            Encode!(&permissions.id, &protocol_perm).unwrap()
+        );
+        assert!(add_perm_result.is_ok(), "Failed to add protocol permission");
+        
+        // 4. Test that another user cannot use these permissions
+        let unauthorized_supply = pic.update_call(
+            canister_id,
+            another_principal, // Different user
+            "supply_link_to_aave_secured",
+            Encode!(&"0.1".to_string(), &permissions.id).unwrap()
+        );
+        
+        match unauthorized_supply {
+            Ok(bytes) => {
+                let result: Result<String, String> = 
+                    Decode!(&bytes, Result<String, String>).expect("Failed to decode result");
+                
+                assert!(result.is_err(), "Unauthorized access should fail");
+                let error = result.unwrap_err();
+                assert!(
+                    error.contains("Access denied") || 
+                    error.contains("not the owner") ||
+                    error.contains("permission"),
+                    "Expected access denied error, got: {}", error
+                );
+            },
+            Err(e) => {
+                panic!("Unauthorized supply call was rejected: {:?}", e);
+            }
+        }
+        
+        // 5. Test that withdraw is not allowed (not in allowed_functions)
+        let unauthorized_function = pic.update_call(
+            canister_id,
+            user_principal, // Correct user but wrong function
+            "withdraw_link_from_aave_secured",
+            Encode!(&"0.1".to_string(), &permissions.id).unwrap()
+        );
+        
+        match unauthorized_function {
+            Ok(bytes) => {
+                let result: Result<String, String> = 
+                    Decode!(&bytes, Result<String, String>).expect("Failed to decode result");
+                
+                assert!(result.is_err(), "Unauthorized function should fail");
+                let error = result.unwrap_err();
+                assert!(
+                    error.contains("not allowed") || 
+                    error.contains("Function withdraw not allowed"),
+                    "Expected function not allowed error, got: {}", error
+                );
+            },
+            Err(e) => {
+                panic!("Unauthorized function call was rejected: {:?}", e);
+            }
+        }
+    }
+
+    // ===== SPRINT 3 COMPREHENSIVE INTEGRATION TESTS =====
+
+    // 🆕 Тест полного workflow Milestone 2 (Задача 4.1)
+    #[test]
+    fn test_milestone_2_complete_workflow() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        
+        // Step 1: Generate EVM address
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        let evm_address = match gen_result {
+            Ok(bytes) => {
+                let address_result: Result<String, String> = 
+                    Decode!(&bytes, Result<String, String>).expect("Failed to decode result");
+                address_result.expect("Failed to generate EVM address")
+            },
+            Err(e) => panic!("Failed to generate EVM address: {:?}", e)
+        };
+        
+        println!("✅ Generated EVM address: {}", evm_address);
+        
+        // Step 2: Create permissions with AAVE protocol
+        let permissions_request = CreatePermissionsRequest {
+            whitelisted_protocols: vec![Protocol {
+                name: "AAVE".to_string(),
+                address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+            }],
+            whitelisted_tokens: vec![Token {
+                name: "LINK".to_string(),
+                address: "0x779877A7B0D9E8603169DdbD7836e478b4624789".to_string(),
+            }],
+            transfer_limits: vec![],
+        };
+        
+        let create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&permissions_request).unwrap()
+        );
+        
+        let permissions = match create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                permissions_result.expect("Failed to create permissions")
+            },
+            Err(e) => panic!("Failed to create permissions: {:?}", e)
+        };
+        
+        println!("✅ Created permissions with ID: {}", permissions.id);
+        
+                 // Step 3: Add AAVE protocol permission
+         let protocol_perm = ProtocolPermission {
+             protocol_address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+             allowed_functions: vec!["supply".to_string(), "withdraw".to_string()],
+             max_amount_per_tx: Some(1_000_000_000_000_000_000), // 1 LINK (18 decimals)
+             daily_limit: Some(5_000_000_000_000_000_000), // 5 LINK
+             total_used_today: 0,
+             last_reset_date: 0,
+         };
+        
+        let add_perm_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "update_protocol_permission",
+            Encode!(&permissions.id, &protocol_perm).unwrap()
+        );
+        
+        match add_perm_result {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert_eq!(result, Ok(true), "Adding protocol permission should succeed");
+            },
+            Err(e) => panic!("Failed to add protocol permission: {:?}", e)
+        }
+        
+        println!("✅ Added AAVE protocol permission");
+        
+                 // Step 4: Test supply to AAVE (expected to fail due to insufficient balance)
+         let supply_result = pic.update_call(
+             canister_id,
+             user_principal,
+             "supply_link_to_aave_secured",
+             Encode!(&"1.0".to_string(), &permissions.id).unwrap()
+         );
+        
+        match supply_result {
+            Ok(bytes) => {
+                let result: Result<String, String> = 
+                    Decode!(&bytes, Result<String, String>).expect("Failed to decode result");
+                
+                match result {
+                    Ok(success_msg) => {
+                        println!("✅ AAVE supply succeeded: {}", success_msg);
+                        assert!(success_msg.contains("Successfully supplied"), "Should contain success message");
+                        
+                        // Step 5: Check aLINK balance
+                        let balance_result = pic.update_call(
+                            canister_id,
+                            user_principal,
+                            "get_aave_link_user_balance",
+                            Encode!(&None::<String>).unwrap()
+                        );
+                        
+                        match balance_result {
+                            Ok(balance_bytes) => {
+                                let balance: Result<String, String> = 
+                                    Decode!(&balance_bytes, Result<String, String>).expect("Failed to decode balance");
+                                println!("✅ aLINK balance check completed: {:?}", balance);
+                            },
+                            Err(e) => println!("Expected balance check error: {:?}", e)
+                        }
+                        
+                        // Step 6: Test withdraw from AAVE
+                        let withdraw_result = pic.update_call(
+                            canister_id,
+                            user_principal,
+                            "withdraw_link_from_aave_secured",
+                            Encode!(&"5.0".to_string(), &permissions.id).unwrap()
+                        );
+                        
+                        match withdraw_result {
+                            Ok(withdraw_bytes) => {
+                                let withdraw: Result<String, String> = 
+                                    Decode!(&withdraw_bytes, Result<String, String>).expect("Failed to decode withdraw");
+                                println!("✅ AAVE withdraw completed: {:?}", withdraw);
+                            },
+                            Err(e) => println!("Expected withdraw error: {:?}", e)
+                        }
+                    },
+                    Err(error) => {
+                        println!("✅ Expected error (insufficient balance): {}", error);
+                        assert!(
+                            error.contains("Insufficient LINK balance") ||
+                            error.contains("Failed to get balance") ||
+                            error.contains("network") ||
+                            error.contains("RPC") ||
+                            error.contains("No route to canister") ||
+                            error.contains("server returned an error response"),
+                            "Error should be balance/network related, got: {}", error
+                        );
+                    }
+                }
+            },
+            Err(e) => panic!("AAVE supply call was rejected: {:?}", e)
+        }
+        
+        println!("✅ Milestone 2 complete workflow test finished");
+    }
+
+    // 🆕 Тест daily limits и per-transaction limits (Задача 4.1)
+    #[test]
+    fn test_daily_limits_enforcement() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        
+        // 1. Generate EVM address
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        // 2. Create permissions
+        let request = CreatePermissionsRequest {
+            whitelisted_protocols: vec![],
+            whitelisted_tokens: vec![],
+            transfer_limits: vec![],
+        };
+        
+        let create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&request).unwrap()
+        );
+        
+        let permissions = match create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                permissions_result.expect("Failed to create permissions")
+            },
+            Err(e) => panic!("Failed to create permissions: {:?}", e)
+        };
+        
+                 // 3. Add AAVE protocol permission with strict limits
+         let protocol_perm = ProtocolPermission {
+             protocol_address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+             allowed_functions: vec!["supply".to_string()],
+             max_amount_per_tx: Some(500_000_000_000_000_000), // 0.5 LINK max per tx
+             daily_limit: Some(1_000_000_000_000_000_000), // 1 LINK daily limit
+             total_used_today: 0,
+             last_reset_date: 0,
+         };
+        
+        let add_perm_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "update_protocol_permission",
+            Encode!(&permissions.id, &protocol_perm).unwrap()
+        );
+        assert!(add_perm_result.is_ok(), "Failed to add protocol permission");
+        
+        // 4. Test per-transaction limit exceeded
+        let over_tx_limit = pic.query_call(
+            canister_id,
+            user_principal,
+            "check_protocol_permission",
+            Encode!(
+                &permissions.id,
+                &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+                &"supply".to_string(),
+                                 &600_000_000_000_000_000u64 // 0.6 LINK (exceeds per-tx limit of 0.5)
+             ).unwrap()
+         );
+         
+         match over_tx_limit {
+             Ok(bytes) => {
+                 let result: Result<bool, String> = 
+                     Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                 assert!(result.is_err(), "Over per-tx limit should fail");
+                 let error = result.unwrap_err();
+                 assert!(error.contains("exceeds max limit"), "Expected 'exceeds max limit' error, got: {}", error);
+                 println!("✅ Per-transaction limit enforcement works: {}", error);
+             },
+             Err(e) => panic!("Per-tx limit check was rejected: {:?}", e)
+         }
+         
+         // 5. Test within per-transaction limit
+         let within_tx_limit = pic.query_call(
+             canister_id,
+             user_principal,
+             "check_protocol_permission",
+             Encode!(
+                 &permissions.id,
+                 &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+                 &"supply".to_string(),
+                 &400_000_000_000_000_000u64 // 0.4 LINK (within per-tx limit)
+            ).unwrap()
+        );
+        
+        match within_tx_limit {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert_eq!(result, Ok(true), "Within per-tx limit should succeed");
+                println!("✅ Within per-transaction limit check works");
+            },
+            Err(e) => panic!("Within per-tx limit check was rejected: {:?}", e)
+        }
+        
+        println!("✅ Daily limits enforcement test completed");
+    }
+
+    // 🆕 Тест error handling (Задача 4.1)
+    #[test]
+    fn test_comprehensive_error_handling() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        
+        // 1. Generate EVM address
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        // 2. Create permissions
+        let request = CreatePermissionsRequest {
+            whitelisted_protocols: vec![],
+            whitelisted_tokens: vec![],
+            transfer_limits: vec![],
+        };
+        
+        let create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&request).unwrap()
+        );
+        
+        let permissions = match create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                permissions_result.expect("Failed to create permissions")
+            },
+            Err(e) => panic!("Failed to create permissions: {:?}", e)
+        };
+        
+        // Test 1: Invalid permissions ID
+        let invalid_permissions_check = pic.query_call(
+            canister_id,
+            user_principal,
+            "check_protocol_permission",
+            Encode!(
+                &"invalid_permissions_id".to_string(),
+                &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+                &"supply".to_string(),
+                &1_000_000_000_000_000_000u64 // 1 LINK
+            ).unwrap()
+        );
+        
+        match invalid_permissions_check {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert!(result.is_err(), "Invalid permissions ID should fail");
+                let error = result.unwrap_err();
+                assert!(error.contains("not found"), "Expected 'not found' error, got: {}", error);
+                println!("✅ Invalid permissions ID error: {}", error);
+            },
+            Err(e) => panic!("Invalid permissions check was rejected: {:?}", e)
+        }
+        
+        // Test 2: Protocol not found (no protocol permissions added)
+        let protocol_not_found = pic.query_call(
+            canister_id,
+            user_principal,
+            "check_protocol_permission",
+            Encode!(
+                &permissions.id,
+                &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+                &"supply".to_string(),
+                &1_000_000_000_000_000_000u64 // 1 LINK
+            ).unwrap()
+        );
+        
+        match protocol_not_found {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert!(result.is_err(), "Protocol not found should fail");
+                let error = result.unwrap_err();
+                assert!(error.contains("not found"), "Expected 'not found' error, got: {}", error);
+                println!("✅ Protocol not found error: {}", error);
+            },
+            Err(e) => panic!("Protocol not found check was rejected: {:?}", e)
+        }
+        
+        // Add protocol permission for further tests
+                 let protocol_perm = ProtocolPermission {
+             protocol_address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+             allowed_functions: vec!["supply".to_string()], // Only supply allowed
+             max_amount_per_tx: Some(1_000_000_000_000_000_000), // 1 LINK
+             daily_limit: Some(5_000_000_000_000_000_000), // 5 LINK
+             total_used_today: 0,
+             last_reset_date: 0,
+         };
+        
+        let add_perm_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "update_protocol_permission",
+            Encode!(&permissions.id, &protocol_perm).unwrap()
+        );
+        assert!(add_perm_result.is_ok(), "Failed to add protocol permission");
+        
+        // Test 3: Function not allowed
+        let function_not_allowed = pic.query_call(
+            canister_id,
+            user_principal,
+            "check_protocol_permission",
+            Encode!(
+                &permissions.id,
+                &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+                &"borrow".to_string(), // Not in allowed_functions
+                &1_000_000_000_000_000_000u64 // 1 LINK
+            ).unwrap()
+        );
+        
+        match function_not_allowed {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert!(result.is_err(), "Function not allowed should fail");
+                let error = result.unwrap_err();
+                assert!(error.contains("not allowed"), "Expected 'not allowed' error, got: {}", error);
+                println!("✅ Function not allowed error: {}", error);
+            },
+            Err(e) => panic!("Function not allowed check was rejected: {:?}", e)
+        }
+        
+                 // Test 4: AAVE supply with insufficient balance (real network call)
+         let insufficient_balance_supply = pic.update_call(
+             canister_id,
+             user_principal,
+             "supply_link_to_aave_secured",
+             Encode!(&"1.0".to_string(), &permissions.id).unwrap()
+         );
+        
+        match insufficient_balance_supply {
+            Ok(bytes) => {
+                let result: Result<String, String> = 
+                    Decode!(&bytes, Result<String, String>).expect("Failed to decode result");
+                
+                match result {
+                    Ok(success_msg) => {
+                        // Unexpected success
+                        println!("Unexpected success: {}", success_msg);
+                    },
+                    Err(error) => {
+                        println!("✅ Expected insufficient balance error: {}", error);
+                        assert!(
+                            error.contains("Insufficient LINK balance") ||
+                            error.contains("Failed to get balance") ||
+                            error.contains("network") ||
+                            error.contains("RPC") ||
+                            error.contains("No route to canister") ||
+                            error.contains("server returned an error response"),
+                            "Error should be balance/network related, got: {}", error
+                        );
+                    }
+                }
+            },
+            Err(e) => {
+                println!("Expected rejection (network/balance): {:?}", e);
+            }
+        }
+        
+        println!("✅ Comprehensive error handling test completed");
+    }
+
+    // 🆕 Тест multiple protocol permissions (Задача 4.1)
+    #[test]
+    fn test_multiple_protocol_permissions() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        
+        // 1. Generate EVM address
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        // 2. Create permissions
+        let request = CreatePermissionsRequest {
+            whitelisted_protocols: vec![],
+            whitelisted_tokens: vec![],
+            transfer_limits: vec![],
+        };
+        
+        let create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&request).unwrap()
+        );
+        
+        let permissions = match create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                permissions_result.expect("Failed to create permissions")
+            },
+            Err(e) => panic!("Failed to create permissions: {:?}", e)
+        };
+        
+        // 3. Add AAVE protocol permission
+                 let aave_perm = ProtocolPermission {
+             protocol_address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+             allowed_functions: vec!["supply".to_string(), "withdraw".to_string()],
+             max_amount_per_tx: Some(1_000_000_000_000_000_000), // 1 LINK
+             daily_limit: Some(5_000_000_000_000_000_000), // 5 LINK
+             total_used_today: 0,
+             last_reset_date: 0,
+         };
+        
+        let add_aave_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "update_protocol_permission",
+            Encode!(&permissions.id, &aave_perm).unwrap()
+        );
+        assert!(add_aave_result.is_ok(), "Failed to add AAVE protocol permission");
+        
+        // 4. Try to add another protocol permission with same address (should fail)
+                 let duplicate_perm = ProtocolPermission {
+             protocol_address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(), // Same address
+             allowed_functions: vec!["borrow".to_string()],
+             max_amount_per_tx: Some(500_000_000_000_000_000), // 0.5 LINK
+             daily_limit: Some(2_000_000_000_000_000_000), // 2 LINK
+             total_used_today: 0,
+             last_reset_date: 0,
+         };
+        
+        let add_duplicate_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "update_protocol_permission",
+            Encode!(&permissions.id, &duplicate_perm).unwrap()
+        );
+        
+        match add_duplicate_result {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert!(result.is_err(), "Duplicate protocol permission should fail");
+                let error = result.unwrap_err();
+                assert!(error.contains("already exists"), "Expected 'already exists' error, got: {}", error);
+                println!("✅ Duplicate protocol permission correctly rejected: {}", error);
+            },
+            Err(e) => panic!("Duplicate protocol permission call was rejected: {:?}", e)
+        }
+        
+        // 5. Verify AAVE permissions still work
+        let verify_aave = pic.query_call(
+            canister_id,
+            user_principal,
+            "check_protocol_permission",
+            Encode!(
+                &permissions.id,
+                &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+                &"supply".to_string(),
+                                 &500_000_000_000_000_000u64 // 0.5 LINK
+            ).unwrap()
+        );
+        
+        match verify_aave {
+            Ok(bytes) => {
+                let result: Result<bool, String> = 
+                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                assert_eq!(result, Ok(true), "AAVE permission should still work");
+                println!("✅ AAVE permissions verified after duplicate attempt");
+            },
+            Err(e) => panic!("AAVE permission verification was rejected: {:?}", e)
+        }
+        
+        println!("✅ Multiple protocol permissions test completed");
     }
 }

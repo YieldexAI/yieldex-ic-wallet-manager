@@ -24,7 +24,8 @@ use services::{
     approve_weth::{approve_weth_for_uniswap, approve_weth, approve_weth_human, get_weth_allowance, get_weth_balance, revoke_weth_approval},
     sign_message::{sign_message, sign_message_with_address, sign_hash},
     wrap_eth::{wrap_eth, wrap_eth_human, unwrap_weth, unwrap_weth_human},
-    uniswap::{get_weth_usdc_quote_v3_human, approve_weth_for_universal_router_human}
+    permissions::{is_permissions_owner, verify_protocol_permission, add_protocol_permission, set_daily_usage},
+    aave::{supply_link_to_aave_with_permissions, withdraw_link_from_aave_with_permissions, get_aave_link_balance} // 🆕 AAVE Service Methods (Sprint 2)
 };
 
 // --- Types ---
@@ -47,6 +48,17 @@ pub struct TransferLimit {
     max_tx_amount: u64,
 }
 
+// 🆕 Новый тип для protocol permissions (Задача 1.1)
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct ProtocolPermission {
+    pub protocol_address: String,
+    pub allowed_functions: Vec<String>, // ["supply", "withdraw", "borrow"]
+    pub max_amount_per_tx: Option<u64>,
+    pub daily_limit: Option<u64>,
+    pub total_used_today: u64,
+    pub last_reset_date: u64, // Timestamp для сброса daily limit
+}
+
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Token {
     pub name: String,
@@ -60,6 +72,7 @@ pub struct Permissions {
     whitelisted_protocols: Vec<Protocol>,
     whitelisted_tokens: Vec<Token>,
     transfer_limits: Vec<TransferLimit>,
+    protocol_permissions: Vec<ProtocolPermission>, // 🆕 Новое поле (Задача 1.1)
     created_at: u64,
     updated_at: u64,
 }
@@ -245,15 +258,6 @@ fn verify_user(user: Principal) -> Result<bool, String> {
 
 // --- Permissions Management ---
 
-// Check if caller is owner of the permissions
-fn is_permissions_owner(permissions_id: &str, caller: Principal) -> bool {
-    PERMISSIONS_MAP.with(|map| {
-        map.borrow()
-            .get(&StorableString(permissions_id.to_string()))
-            .map_or(false, |p| p.0.owner == caller)
-    })
-}
-
 #[update]
 async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions, String> {
     let caller = ic_cdk::caller();
@@ -271,6 +275,7 @@ async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions
         whitelisted_protocols: req.whitelisted_protocols,
         whitelisted_tokens: req.whitelisted_tokens,
         transfer_limits: req.transfer_limits,
+        protocol_permissions: Vec::new(),
         created_at: timestamp,
         updated_at: timestamp,
     };
@@ -330,8 +335,8 @@ fn update_permissions(req: UpdatePermissionsRequest) -> Result<Permissions, Stri
     let permissions_id = req.permissions_id.clone();
     
     // Check if permissions exist and caller is the owner
-    if !is_permissions_owner(&permissions_id, caller) {
-        return Err(format!("Permissions with ID {} not found or you do not have permission to update them", permissions_id));
+    if let Err(e) = is_permissions_owner(&permissions_id, caller) {
+        return Err(e);
     }
     
     // Get the existing permissions
@@ -372,8 +377,8 @@ fn update_permissions(req: UpdatePermissionsRequest) -> Result<Permissions, Stri
 fn delete_permissions(permissions_id: String) -> Result<bool, String> {
     let caller = ic_cdk::caller();
     // Check if permissions exist and caller is the owner
-    if !is_permissions_owner(&permissions_id, caller) {
-        return Err(format!("Permissions with ID {} not found or you do not have permission to delete them", permissions_id));
+    if let Err(e) = is_permissions_owner(&permissions_id, caller) {
+        return Err(e);
     }
     // Delete the permissions
     let removed = PERMISSIONS_MAP.with(|map| map.borrow_mut().remove(&StorableString(permissions_id))).is_some();
@@ -382,6 +387,41 @@ fn delete_permissions(permissions_id: String) -> Result<bool, String> {
     } else {
         Err("Failed to delete permissions (not found)".to_string())
     }
+}
+
+// 🆕 Новые функции для protocol permissions (Задача 1.1) - используют permissions сервис
+
+/// Проверить разрешение на выполнение операции с протоколом
+#[query]
+fn check_protocol_permission(
+    permissions_id: String, 
+    protocol_address: String, 
+    function_name: String,
+    amount: u64
+) -> Result<bool, String> {
+    let caller = ic_cdk::caller();
+    verify_protocol_permission(permissions_id, protocol_address, function_name, amount, caller)
+}
+
+/// Добавить разрешение для протокола
+#[update] 
+fn update_protocol_permission(
+    permissions_id: String,
+    protocol_permission: ProtocolPermission
+) -> Result<bool, String> {
+    let caller = ic_cdk::caller();
+    add_protocol_permission(permissions_id, protocol_permission, caller)
+}
+
+/// Обновить использованный лимит за сегодня
+#[update]
+fn update_daily_usage(
+    permissions_id: String,
+    protocol_address: String,
+    amount_used: u64
+) -> Result<bool, String> {
+    let caller = ic_cdk::caller();
+    set_daily_usage(permissions_id, protocol_address, amount_used, caller)
 }
 
 // --- Balance Service Methods ---
@@ -551,19 +591,47 @@ async fn get_weth_balance_for_wrapping(address: Option<String>) -> Result<String
     get_weth_balance(address).await
 }
 
+// --- AAVE Service Methods (Sprint 2) ---
+
+/// Supply LINK to AAVE with permission verification
+#[update]
+async fn supply_link_to_aave_secured(
+    amount_human: String, 
+    permissions_id: String
+) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+    supply_link_to_aave_with_permissions(amount_human, permissions_id, caller).await
+}
+
+/// Withdraw LINK from AAVE with permission verification
+#[update]
+async fn withdraw_link_from_aave_secured(
+    amount_human: String, 
+    permissions_id: String
+) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+    withdraw_link_from_aave_with_permissions(amount_human, permissions_id, caller).await
+}
+
+/// Get user's aLINK balance in AAVE
+#[update]
+async fn get_aave_link_user_balance(address: Option<String>) -> Result<String, String> {
+    get_aave_link_balance(address).await
+}
+
 // --- Uniswap Service Methods ---
 
-/// Get estimated quote for WETH → USDC swap
-#[update]
-async fn get_weth_usdc_quote_human_readable(weth_amount_human: String) -> Result<String, String> {
-    get_weth_usdc_quote_v3_human(weth_amount_human).await
-}
+// /// Get estimated quote for WETH → USDC swap
+// #[update]
+// async fn get_weth_usdc_quote_human_readable(weth_amount_human: String) -> Result<String, String> {
+//     get_weth_usdc_quote_v3_human(weth_amount_human).await
+// }
 
-/// Approve Universal Router to spend WETH for Uniswap V3 swaps
-#[update]
-async fn approve_weth_for_uniswap_v3(amount_human: String) -> Result<String, String> {
-    approve_weth_for_universal_router_human(amount_human).await
-}
+// /// Approve Universal Router to spend WETH for Uniswap V3 swaps
+// #[update]
+// async fn approve_weth_for_uniswap_v3(amount_human: String) -> Result<String, String> {
+//     approve_weth_for_universal_router_human(amount_human).await
+// }
 
 // --- RPC Service Configuration ---
 

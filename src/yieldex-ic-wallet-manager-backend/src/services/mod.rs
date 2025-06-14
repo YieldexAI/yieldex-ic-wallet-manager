@@ -8,3 +8,5 @@ pub mod approve_weth;
 pub mod sign_message;
 pub mod wrap_eth;
 pub mod uniswap;
+pub mod permissions;
+pub mod aave;
