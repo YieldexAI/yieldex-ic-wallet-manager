@@ -209,28 +209,49 @@ async fn generate_evm_address() -> Result<String, String> {
     let user = ic_cdk::caller();
     let storable_principal = StorablePrincipal(user);
 
+    ic_cdk::println!("🔑 Starting EVM address generation for principal {}", user);
+
     // 1. Check if address already exists for the given principal
+    ic_cdk::println!("✅ Step 1: Checking existing EVM address...");
     if let Some(storable_address) = PRINCIPAL_TO_ADDRESS_MAP.with(|map| map.borrow().get(&storable_principal)) {
-        ic_cdk::println!("Address found for principal {}", user);
+        ic_cdk::println!("✅ Step 1 Complete: Address found for principal {}", user);
+        ic_cdk::println!("📋 Existing EVM Address: {}", storable_address.0);
+        ic_cdk::println!("🎉 EVM address retrieval completed successfully");
         return Ok(storable_address.0);
     }
 
-    ic_cdk::println!("Address not found for principal {}, generating...", user);
+    ic_cdk::println!("✅ Step 1 Complete: No existing address found, proceeding with generation");
+    ic_cdk::println!("📝 Principal details: {}", user);
 
     // 2. Generate new address using IcpSigner
-    let signer = create_icp_signer().await?;
+    ic_cdk::println!("✅ Step 2: Creating ICP signer with threshold ECDSA...");
+    let signer = create_icp_signer().await.map_err(|e| {
+        let error_msg = format!("Failed to create ICP signer: {}", e);
+        ic_cdk::println!("❌ Step 2 Failed: {}", error_msg);
+        error_msg
+    })?;
+    ic_cdk::println!("✅ Step 2 Complete: ICP signer created successfully");
 
     // Get the address from the signer
+    ic_cdk::println!("✅ Step 3: Deriving EVM address from signer...");
     let address: Address = signer.address();
-
-    // Format the address as a hex string
     let address_hex = format!("0x{:x}", address);
+    ic_cdk::println!("✅ Step 3 Complete: EVM address derived: {}", address_hex);
 
     // 3. Store the new address
+    ic_cdk::println!("✅ Step 4: Storing EVM address in stable memory...");
     PRINCIPAL_TO_ADDRESS_MAP.with(|map| {
         map.borrow_mut().insert(storable_principal, StorableString(address_hex.clone()));
     });
-    ic_cdk::println!("Stored address {} for principal {}", address_hex, user);
+    ic_cdk::println!("✅ Step 4 Complete: Address stored successfully");
+    
+    ic_cdk::println!("📋 Generation Summary:");
+    ic_cdk::println!("  - Principal: {}", user);
+    ic_cdk::println!("  - Generated Address: {}", address_hex);
+    ic_cdk::println!("  - Storage: Stable Memory");
+    ic_cdk::println!("  - Derivation: IC Threshold ECDSA");
+    
+    ic_cdk::println!("🎉 EVM address generation completed successfully: {}", address_hex);
 
     Ok(address_hex)
 }
@@ -262,14 +283,68 @@ fn verify_user(user: Principal) -> Result<bool, String> {
 #[update]
 async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions, String> {
     let caller = ic_cdk::caller();
+    
+    ic_cdk::println!("🔐 Starting permissions creation for principal {}", caller);
+    
     // Check if the caller has an EVM address
+    ic_cdk::println!("✅ Step 1: Verifying user has EVM address...");
     match verify_user(caller) {
-        Ok(true) => {},
-        Ok(false) => return Err("You must generate an EVM address first".to_string()),
-        Err(e) => return Err(e),
+        Ok(true) => {
+            ic_cdk::println!("✅ Step 1 Complete: User has valid EVM address");
+        },
+        Ok(false) => {
+            let error_msg = "You must generate an EVM address first".to_string();
+            ic_cdk::println!("❌ Step 1 Failed: {}", error_msg);
+            return Err(error_msg);
+        },
+        Err(e) => {
+            ic_cdk::println!("❌ Step 1 Failed: {}", e);
+            return Err(e);
+        },
     }
+    
+    // Generate unique permissions ID
+    ic_cdk::println!("✅ Step 2: Generating unique permissions ID...");
     let permissions_id = generate_permissions_id().await;
+    ic_cdk::println!("✅ Step 2 Complete: Generated permissions ID: {}", permissions_id);
+    
+    // Get current timestamp
+    ic_cdk::println!("✅ Step 3: Setting timestamps...");
     let timestamp = now();
+    ic_cdk::println!("✅ Step 3 Complete: Timestamp set to: {}", timestamp);
+    
+    // Log request details
+    ic_cdk::println!("📋 Permission Request Details:");
+    ic_cdk::println!("  - Whitelisted Protocols: {} protocols", req.whitelisted_protocols.len());
+    for (i, protocol) in req.whitelisted_protocols.iter().enumerate() {
+        ic_cdk::println!("    {}. {} ({})", i + 1, protocol.name, protocol.address);
+    }
+    ic_cdk::println!("  - Whitelisted Tokens: {} tokens", req.whitelisted_tokens.len());
+    for (i, token) in req.whitelisted_tokens.iter().enumerate() {
+        ic_cdk::println!("    {}. {} ({})", i + 1, token.name, token.address);
+    }
+    ic_cdk::println!("  - Transfer Limits: {} limits", req.transfer_limits.len());
+    for (i, limit) in req.transfer_limits.iter().enumerate() {
+        ic_cdk::println!("    {}. Token {} - Daily: {}, Max TX: {}", 
+                        i + 1, limit.token_address, limit.daily_limit, limit.max_tx_amount);
+    }
+    
+    let empty_vec = vec![];
+    let protocol_perms = req.protocol_permissions.as_ref().unwrap_or(&empty_vec);
+    ic_cdk::println!("  - Protocol Permissions: {} permissions", protocol_perms.len());
+    for (i, perm) in protocol_perms.iter().enumerate() {
+        ic_cdk::println!("    {}. Protocol {} - Functions: {:?}", 
+                        i + 1, perm.protocol_address, perm.allowed_functions);
+        if let Some(max_tx) = perm.max_amount_per_tx {
+            ic_cdk::println!("       Max TX: {}", max_tx);
+        }
+        if let Some(daily) = perm.daily_limit {
+            ic_cdk::println!("       Daily Limit: {}", daily);
+        }
+    }
+    
+    // Create permissions struct
+    ic_cdk::println!("✅ Step 4: Creating permissions structure...");
     let permissions = Permissions {
         id: permissions_id.clone(),
         owner: caller,
@@ -280,12 +355,29 @@ async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions
         created_at: timestamp,
         updated_at: timestamp,
     };
+    ic_cdk::println!("✅ Step 4 Complete: Permissions structure created");
+    
+    // Store in stable memory
+    ic_cdk::println!("✅ Step 5: Storing permissions in stable memory...");
     PERMISSIONS_MAP.with(|map| {
         map.borrow_mut().insert(
-            StorableString(permissions_id), 
+            StorableString(permissions_id.clone()), 
             StorablePermissions(permissions.clone())
         );
     });
+    ic_cdk::println!("✅ Step 5 Complete: Permissions stored successfully");
+    
+    ic_cdk::println!("📋 Creation Summary:");
+    ic_cdk::println!("  - Permissions ID: {}", permissions_id);
+    ic_cdk::println!("  - Owner: {}", caller);
+    ic_cdk::println!("  - Total Protocols: {}", permissions.whitelisted_protocols.len());
+    ic_cdk::println!("  - Total Tokens: {}", permissions.whitelisted_tokens.len());
+    ic_cdk::println!("  - Total Limits: {}", permissions.transfer_limits.len());
+    ic_cdk::println!("  - Total Protocol Permissions: {}", permissions.protocol_permissions.len());
+    ic_cdk::println!("  - Created At: {}", timestamp);
+    
+    ic_cdk::println!("🎉 Permissions creation completed successfully: {}", permissions_id);
+    
     Ok(permissions)
 }
 
@@ -293,25 +385,51 @@ async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions
 fn get_permissions(permissions_id: String) -> Result<Permissions, String> {
     let caller = ic_cdk::caller();
     
-    PERMISSIONS_MAP.with(|map| {
+    ic_cdk::println!("🔍 Starting permissions retrieval for ID: {}", permissions_id);
+    ic_cdk::println!("📝 Requested by principal: {}", caller);
+    
+    let result = PERMISSIONS_MAP.with(|map| {
         map.borrow()
             .get(&StorableString(permissions_id.clone()))
             .map_or_else(
-                || Err(format!("Permissions with ID {} not found", permissions_id)),
+                || {
+                    let error_msg = format!("Permissions with ID {} not found", permissions_id);
+                    ic_cdk::println!("❌ Permissions not found: {}", error_msg);
+                    Err(error_msg)
+                },
                 |p| {
                     if p.0.owner == caller {
+                        ic_cdk::println!("✅ Permissions found and ownership verified");
+                        ic_cdk::println!("📋 Permissions Details:");
+                        ic_cdk::println!("  - ID: {}", p.0.id);
+                        ic_cdk::println!("  - Owner: {}", p.0.owner);
+                        ic_cdk::println!("  - Protocols: {}", p.0.whitelisted_protocols.len());
+                        ic_cdk::println!("  - Tokens: {}", p.0.whitelisted_tokens.len());
+                        ic_cdk::println!("  - Transfer Limits: {}", p.0.transfer_limits.len());
+                        ic_cdk::println!("  - Protocol Permissions: {}", p.0.protocol_permissions.len());
+                        ic_cdk::println!("  - Created At: {}", p.0.created_at);
+                        ic_cdk::println!("  - Updated At: {}", p.0.updated_at);
+                        ic_cdk::println!("🎉 Permissions retrieval completed successfully");
                         Ok(p.0)
                     } else {
-                        Err("You do not have permission to access these permissions".to_string())
+                        let error_msg = "You do not have permission to access these permissions".to_string();
+                        ic_cdk::println!("❌ Access denied: {}", error_msg);
+                        ic_cdk::println!("  - Requested by: {}", caller);
+                        ic_cdk::println!("  - Actual owner: {}", p.0.owner);
+                        Err(error_msg)
                     }
                 }
             )
-    })
+    });
+    
+    result
 }
 
 #[query]
 fn get_all_permissions() -> Result<Vec<Permissions>, String> {
     let caller = ic_cdk::caller();
+    
+    ic_cdk::println!("📋 Starting retrieval of all permissions for principal: {}", caller);
     
     // Collect all permissions owned by the caller
     let mut result = Vec::new();
@@ -319,13 +437,32 @@ fn get_all_permissions() -> Result<Vec<Permissions>, String> {
     PERMISSIONS_MAP.with(|map| {
         let borrowed_map = map.borrow();
         
+        ic_cdk::println!("✅ Step 1: Scanning permissions database...");
+        let total_permissions = borrowed_map.len();
+        ic_cdk::println!("  - Total permissions in database: {}", total_permissions);
+        
         // Iterate through all permissions and filter by owner
-        for (_, permissions) in borrowed_map.iter() {
+        for (id, permissions) in borrowed_map.iter() {
             if permissions.0.owner == caller {
+                ic_cdk::println!("  - Found owned permission: {}", id.0);
                 result.push(permissions.0.clone());
             }
         }
+        
+        ic_cdk::println!("✅ Step 1 Complete: Database scan finished");
     });
+    
+    ic_cdk::println!("📋 Retrieval Summary:");
+    ic_cdk::println!("  - Requested by: {}", caller);
+    ic_cdk::println!("  - Owned permissions found: {}", result.len());
+    
+    // Log each permission briefly
+    for (i, perm) in result.iter().enumerate() {
+        ic_cdk::println!("  {}. ID: {} (Created: {}, Protocols: {}, Tokens: {})", 
+                        i + 1, perm.id, perm.created_at, perm.whitelisted_protocols.len(), perm.whitelisted_tokens.len());
+    }
+    
+    ic_cdk::println!("🎉 All permissions retrieval completed successfully: {} permissions found", result.len());
     
     Ok(result)
 }
@@ -335,41 +472,97 @@ fn update_permissions(req: UpdatePermissionsRequest) -> Result<Permissions, Stri
     let caller = ic_cdk::caller();
     let permissions_id = req.permissions_id.clone();
     
+    ic_cdk::println!("🔄 Starting permissions update for ID: {}", permissions_id);
+    ic_cdk::println!("📝 Requested by principal: {}", caller);
+    
     // Check if permissions exist and caller is the owner
+    ic_cdk::println!("✅ Step 1: Verifying permissions ownership...");
     if let Err(e) = is_permissions_owner(&permissions_id, caller) {
+        ic_cdk::println!("❌ Step 1 Failed: {}", e);
         return Err(e);
     }
+    ic_cdk::println!("✅ Step 1 Complete: Ownership verified");
     
     // Get the existing permissions
+    ic_cdk::println!("✅ Step 2: Loading existing permissions...");
     let mut permissions = PERMISSIONS_MAP.with(|map| {
         map.borrow()
             .get(&StorableString(permissions_id.clone()))
             .unwrap().0.clone()
     });
+    ic_cdk::println!("✅ Step 2 Complete: Existing permissions loaded");
+    
+    // Log current state
+    ic_cdk::println!("📋 Current State:");
+    ic_cdk::println!("  - Protocols: {}", permissions.whitelisted_protocols.len());
+    ic_cdk::println!("  - Tokens: {}", permissions.whitelisted_tokens.len());
+    ic_cdk::println!("  - Transfer Limits: {}", permissions.transfer_limits.len());
+    ic_cdk::println!("  - Protocol Permissions: {}", permissions.protocol_permissions.len());
+    ic_cdk::println!("  - Last Updated: {}", permissions.updated_at);
     
     // Update fields if provided
+    ic_cdk::println!("✅ Step 3: Applying updates...");
+    let mut changes_made = 0;
+    
     if let Some(protocols) = req.whitelisted_protocols {
+        ic_cdk::println!("🔄 Updating whitelisted protocols: {} -> {}", 
+                        permissions.whitelisted_protocols.len(), protocols.len());
+        for (i, protocol) in protocols.iter().enumerate() {
+            ic_cdk::println!("    {}. {} ({})", i + 1, protocol.name, protocol.address);
+        }
         permissions.whitelisted_protocols = protocols;
+        changes_made += 1;
     }
     
     if let Some(tokens) = req.whitelisted_tokens {
+        ic_cdk::println!("🔄 Updating whitelisted tokens: {} -> {}", 
+                        permissions.whitelisted_tokens.len(), tokens.len());
+        for (i, token) in tokens.iter().enumerate() {
+            ic_cdk::println!("    {}. {} ({})", i + 1, token.name, token.address);
+        }
         permissions.whitelisted_tokens = tokens;
+        changes_made += 1;
     }
     
     if let Some(limits) = req.transfer_limits {
+        ic_cdk::println!("🔄 Updating transfer limits: {} -> {}", 
+                        permissions.transfer_limits.len(), limits.len());
+        for (i, limit) in limits.iter().enumerate() {
+            ic_cdk::println!("    {}. Token {} - Daily: {}, Max TX: {}", 
+                            i + 1, limit.token_address, limit.daily_limit, limit.max_tx_amount);
+        }
         permissions.transfer_limits = limits;
+        changes_made += 1;
     }
     
+    ic_cdk::println!("✅ Step 3 Complete: {} field(s) updated", changes_made);
+    
     // Update the timestamp
-    permissions.updated_at = now();
+    ic_cdk::println!("✅ Step 4: Updating timestamp...");
+    let new_timestamp = now();
+    permissions.updated_at = new_timestamp;
+    ic_cdk::println!("✅ Step 4 Complete: Timestamp updated to {}", new_timestamp);
     
     // Save the updated permissions
+    ic_cdk::println!("✅ Step 5: Saving updated permissions to stable memory...");
     PERMISSIONS_MAP.with(|map| {
         map.borrow_mut().insert(
-            StorableString(permissions_id), 
+            StorableString(permissions_id.clone()), 
             StorablePermissions(permissions.clone())
         );
     });
+    ic_cdk::println!("✅ Step 5 Complete: Permissions saved successfully");
+    
+    ic_cdk::println!("📋 Update Summary:");
+    ic_cdk::println!("  - Permissions ID: {}", permissions_id);
+    ic_cdk::println!("  - Changes Made: {}", changes_made);
+    ic_cdk::println!("  - Updated By: {}", caller);
+    ic_cdk::println!("  - New Timestamp: {}", new_timestamp);
+    ic_cdk::println!("  - Total Protocols: {}", permissions.whitelisted_protocols.len());
+    ic_cdk::println!("  - Total Tokens: {}", permissions.whitelisted_tokens.len());
+    ic_cdk::println!("  - Total Limits: {}", permissions.transfer_limits.len());
+    
+    ic_cdk::println!("🎉 Permissions update completed successfully: {}", permissions_id);
     
     Ok(permissions)
 }
@@ -377,16 +570,62 @@ fn update_permissions(req: UpdatePermissionsRequest) -> Result<Permissions, Stri
 #[update]
 fn delete_permissions(permissions_id: String) -> Result<bool, String> {
     let caller = ic_cdk::caller();
+    
+    ic_cdk::println!("🗑️ Starting permissions deletion for ID: {}", permissions_id);
+    ic_cdk::println!("📝 Requested by principal: {}", caller);
+    
     // Check if permissions exist and caller is the owner
+    ic_cdk::println!("✅ Step 1: Verifying permissions ownership...");
     if let Err(e) = is_permissions_owner(&permissions_id, caller) {
+        ic_cdk::println!("❌ Step 1 Failed: {}", e);
         return Err(e);
     }
+    ic_cdk::println!("✅ Step 1 Complete: Ownership verified");
+    
+    // Log details before deletion
+    ic_cdk::println!("✅ Step 2: Retrieving permissions details before deletion...");
+    let permissions_details = PERMISSIONS_MAP.with(|map| {
+        map.borrow()
+            .get(&StorableString(permissions_id.clone()))
+            .map(|p| p.0.clone())
+    });
+    
+    if let Some(perms) = permissions_details {
+        ic_cdk::println!("📋 Permissions to be deleted:");
+        ic_cdk::println!("  - ID: {}", perms.id);
+        ic_cdk::println!("  - Owner: {}", perms.owner);
+        ic_cdk::println!("  - Protocols: {}", perms.whitelisted_protocols.len());
+        ic_cdk::println!("  - Tokens: {}", perms.whitelisted_tokens.len());
+        ic_cdk::println!("  - Transfer Limits: {}", perms.transfer_limits.len());
+        ic_cdk::println!("  - Protocol Permissions: {}", perms.protocol_permissions.len());
+        ic_cdk::println!("  - Created At: {}", perms.created_at);
+        ic_cdk::println!("  - Updated At: {}", perms.updated_at);
+        ic_cdk::println!("✅ Step 2 Complete: Details retrieved");
+    } else {
+        ic_cdk::println!("⚠️ Step 2 Warning: Could not retrieve details (permissions may already be deleted)");
+    }
+    
     // Delete the permissions
-    let removed = PERMISSIONS_MAP.with(|map| map.borrow_mut().remove(&StorableString(permissions_id))).is_some();
+    ic_cdk::println!("✅ Step 3: Deleting permissions from stable memory...");
+    let removed = PERMISSIONS_MAP.with(|map| {
+        map.borrow_mut().remove(&StorableString(permissions_id.clone())).is_some()
+    });
+    
     if removed {
+        ic_cdk::println!("✅ Step 3 Complete: Permissions successfully deleted");
+        
+        ic_cdk::println!("📋 Deletion Summary:");
+        ic_cdk::println!("  - Permissions ID: {}", permissions_id);
+        ic_cdk::println!("  - Deleted By: {}", caller);
+        ic_cdk::println!("  - Deletion Time: {}", now());
+        ic_cdk::println!("  - Status: Successfully Removed");
+        
+        ic_cdk::println!("🎉 Permissions deletion completed successfully: {}", permissions_id);
         Ok(true)
     } else {
-        Err("Failed to delete permissions (not found)".to_string())
+        let error_msg = "Failed to delete permissions (not found)".to_string();
+        ic_cdk::println!("❌ Step 3 Failed: {}", error_msg);
+        Err(error_msg)
     }
 }
 
@@ -411,7 +650,45 @@ fn update_protocol_permission(
     protocol_permission: ProtocolPermission
 ) -> Result<bool, String> {
     let caller = ic_cdk::caller();
-    add_protocol_permission(permissions_id, protocol_permission, caller)
+    
+    ic_cdk::println!("🔧 Starting protocol permission update for permissions ID: {}", permissions_id);
+    ic_cdk::println!("📝 Requested by principal: {}", caller);
+    
+    ic_cdk::println!("📋 Protocol Permission Details:");
+    ic_cdk::println!("  - Protocol Address: {}", protocol_permission.protocol_address);
+    ic_cdk::println!("  - Allowed Functions: {:?}", protocol_permission.allowed_functions);
+    if let Some(max_tx) = protocol_permission.max_amount_per_tx {
+        ic_cdk::println!("  - Max TX Amount: {}", max_tx);
+    } else {
+        ic_cdk::println!("  - Max TX Amount: No limit");
+    }
+    if let Some(daily) = protocol_permission.daily_limit {
+        ic_cdk::println!("  - Daily Limit: {}", daily);
+    } else {
+        ic_cdk::println!("  - Daily Limit: No limit");
+    }
+    ic_cdk::println!("  - Total Used Today: {}", protocol_permission.total_used_today);
+    ic_cdk::println!("  - Last Reset Date: {}", protocol_permission.last_reset_date);
+    
+    ic_cdk::println!("✅ Step 1: Calling protocol permission service...");
+    let result = add_protocol_permission(permissions_id.clone(), protocol_permission, caller);
+    
+    match &result {
+        Ok(success) => {
+            ic_cdk::println!("✅ Step 1 Complete: Protocol permission service succeeded");
+            ic_cdk::println!("📋 Update Summary:");
+            ic_cdk::println!("  - Permissions ID: {}", permissions_id);
+            ic_cdk::println!("  - Updated By: {}", caller);
+            ic_cdk::println!("  - Result: {}", success);
+            ic_cdk::println!("  - Timestamp: {}", now());
+            ic_cdk::println!("🎉 Protocol permission update completed successfully");
+        }
+        Err(error) => {
+            ic_cdk::println!("❌ Step 1 Failed: {}", error);
+        }
+    }
+    
+    result
 }
 
 /// Update used limit for today
