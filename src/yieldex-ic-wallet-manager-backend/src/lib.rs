@@ -25,7 +25,9 @@ use services::{
     sign_message::{sign_message, sign_message_with_address, sign_hash},
     wrap_eth::{wrap_eth, wrap_eth_human, unwrap_weth, unwrap_weth_human},
     permissions::{is_permissions_owner, verify_protocol_permission, add_protocol_permission, set_daily_usage},
-    aave::{supply_link_to_aave_with_permissions, withdraw_link_from_aave_with_permissions, get_aave_link_balance} // 🆕 AAVE Service Methods (Sprint 2)
+    aave::{supply_link_to_aave_with_permissions, withdraw_link_from_aave_with_permissions, get_aave_link_balance, supply_token_to_aave_with_permissions}, // 🆕 AAVE Service Methods (Sprint 2)
+    erc20::{get_token_info, get_token_balance, get_token_allowance, parse_token_amount, approve_token, transfer_token}, // 🆕 Universal ERC-20 Service Methods
+    tokens::{get_token_address_by_symbol, SEPOLIA_TOKENS} // 🆕 Token Constants
 };
 
 // --- Types ---
@@ -869,6 +871,80 @@ async fn get_weth_balance_for_wrapping(address: Option<String>) -> Result<String
     get_weth_balance(address).await
 }
 
+// --- Universal ERC-20 Service Methods ---
+
+/// Get information about any ERC-20 token (name, symbol, decimals)
+#[update]
+async fn get_erc20_token_info(token_address: String) -> Result<String, String> {
+    let token_info = get_token_info(token_address).await?;
+    Ok(format!("Token: {} ({}) - {} decimals", token_info.name, token_info.symbol, token_info.decimals))
+}
+
+/// Get balance of any ERC-20 token for an address
+#[update]
+async fn get_erc20_token_balance(token_address: String, user_address: Option<String>) -> Result<String, String> {
+    get_token_balance(token_address, user_address).await
+}
+
+/// Get allowance of any ERC-20 token between owner and spender
+#[update]
+async fn get_erc20_token_allowance(
+    token_address: String,
+    owner_address: Option<String>,
+    spender_address: String
+) -> Result<String, String> {
+    get_token_allowance(token_address, owner_address, spender_address).await
+}
+
+/// Convert human-readable amount to wei format for any ERC-20 token
+#[update]
+async fn convert_token_amount_to_wei(token_address: String, amount_human: String) -> Result<String, String> {
+    let amount_wei = parse_token_amount(token_address, amount_human).await?;
+    Ok(amount_wei.to_string())
+}
+
+/// Approve spending of any ERC-20 token for a spender
+#[update]
+async fn approve_erc20_token_spending(
+    token_address: String,
+    spender_address: String,
+    amount_human: String
+) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+    let amount_wei = parse_token_amount(token_address.clone(), amount_human).await?;
+    approve_token(token_address, spender_address, amount_wei, caller).await
+}
+
+/// Transfer any ERC-20 token to a specified address
+#[update]
+async fn transfer_erc20_token(
+    token_address: String,
+    to_address: String,
+    amount_human: String
+) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+    let amount_wei = parse_token_amount(token_address.clone(), amount_human).await?;
+    transfer_token(token_address, to_address, amount_wei, caller).await
+}
+
+/// Get token address by symbol (e.g., "USDC" -> "0x1c7d4B196Cb0C7B01d743Fbc6116a902379C7238")
+#[query]
+fn get_token_address_by_symbol_query(symbol: String) -> Result<String, String> {
+    match get_token_address_by_symbol(&symbol) {
+        Some(address) => Ok(address.to_string()),
+        None => Err(format!("Token with symbol '{}' not found", symbol))
+    }
+}
+
+/// Get list of all supported tokens on Sepolia
+#[query]
+fn get_supported_tokens() -> Vec<String> {
+    SEPOLIA_TOKENS
+        .iter()
+        .map(|token| format!("{} ({}) - {}", token.symbol, token.name, token.address))
+        .collect()
+}
+
 // --- AAVE Service Methods (Sprint 2) ---
 
 /// Supply LINK to AAVE with permission verification
@@ -895,6 +971,17 @@ async fn withdraw_link_from_aave_secured(
 #[update]
 async fn get_aave_link_user_balance(address: Option<String>) -> Result<String, String> {
     get_aave_link_balance(address).await
+}
+
+/// Supply any ERC-20 token to AAVE with permission verification (Universal Method)
+#[update]
+async fn supply_erc20_token_to_aave_secured(
+    token_address: String,
+    amount_human: String, 
+    permissions_id: String
+) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+    supply_token_to_aave_with_permissions(token_address, amount_human, permissions_id, caller).await
 }
 
 // --- Uniswap Service Methods ---

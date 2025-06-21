@@ -12,6 +12,7 @@ use candid::Principal;
 use crate::{PRINCIPAL_TO_ADDRESS_MAP, StorablePrincipal, get_rpc_service_sepolia};
 use crate::services::permissions::{is_permissions_owner, verify_protocol_permission, set_daily_usage};
 use crate::services::get_balance_link::get_balance_link;
+use crate::services::erc20::{get_token_info, get_token_balance, ensure_token_allowance, parse_token_amount};
 
 thread_local! {
     static AAVE_NONCE: RefCell<Option<u64>> = const { RefCell::new(None) };
@@ -601,4 +602,191 @@ async fn ensure_link_allowance_for_aave(
     }
     
     Ok(())
+}
+
+/// Universal method to supply any ERC-20 token to AAVE with permission verification
+pub async fn supply_token_to_aave_with_permissions(
+    token_address: String,
+    amount_human: String,
+    permissions_id: String,
+    user_principal: Principal
+) -> Result<String, String> {
+    ic_cdk::println!("🚀 Starting AAVE token supply: {} of {} for principal {}", 
+                    amount_human, token_address, user_principal);
+    
+    // 1. Get token information
+    ic_cdk::println!("✅ Step 1: Getting token information...");
+    let token_info = get_token_info(token_address.clone()).await?;
+    ic_cdk::println!("✅ Step 1 Complete: Token info - {} ({}) with {} decimals", 
+                    token_info.name, token_info.symbol, token_info.decimals);
+    
+    // 2. Check permissions
+    ic_cdk::println!("✅ Step 2: Verifying AAVE permissions...");
+    verify_aave_permission(&permissions_id, "supply", &amount_human, user_principal).await?;
+    ic_cdk::println!("✅ Step 2 Complete: AAVE permissions verified");
+    
+    // 3. Convert amount using dynamic decimals
+    ic_cdk::println!("✅ Step 3: Converting amount {} {} to wei...", amount_human, token_info.symbol);
+    let amount_wei = parse_token_amount(token_address.clone(), amount_human.clone()).await?;
+    ic_cdk::println!("✅ Step 3 Complete: Amount converted to {} wei", amount_wei);
+    
+    // 4. Create signer on behalf of user
+    ic_cdk::println!("✅ Step 4: Creating ICP signer for principal...");
+    let signer = create_icp_signer_for_principal(user_principal).await?;
+    let address = signer.address();
+    ic_cdk::println!("✅ Step 4 Complete: Signer created for address 0x{:x}", address);
+
+    // 5. Setup provider
+    ic_cdk::println!("✅ Step 5: Setting up provider and wallet...");
+    let wallet = EthereumWallet::from(signer);
+    let rpc_service = get_rpc_service_sepolia();
+    let config = IcpConfig::new(rpc_service);
+    let provider = ProviderBuilder::new()
+        .with_gas_estimation()
+        .wallet(wallet)
+        .on_icp(config);
+    ic_cdk::println!("✅ Step 5 Complete: Provider and wallet configured");
+    
+    // 6. Check token balance
+    ic_cdk::println!("✅ Step 6: Checking {} balance for address 0x{:x}...", token_info.symbol, address);
+    let token_balance = get_token_balance(token_address.clone(), Some(format!("0x{:x}", address))).await?;
+    let token_balance_wei = U256::from_str_radix(&token_balance.replace("0x", ""), 16)
+        .map_err(|_| "Failed to parse token balance".to_string())?;
+    
+    ic_cdk::println!("✅ Step 6 Complete: {} balance: {} wei (need: {} wei)", 
+                    token_info.symbol, token_balance_wei, amount_wei);
+    
+    if token_balance_wei < amount_wei {
+        let error_msg = format!("Insufficient {} balance. Have: {} wei, Need: {} wei", 
+                               token_info.symbol, token_balance_wei, amount_wei);
+        ic_cdk::println!("❌ AAVE supply failed: {}", error_msg);
+        return Err(error_msg);
+    }
+    
+    // 7. Ensure token allowance for AAVE Pool
+    ic_cdk::println!("✅ Step 7: Ensuring {} allowance for AAVE Pool...", token_info.symbol);
+    ensure_token_allowance(
+        token_address.clone(),
+        AAVE_POOL_ADDRESS.to_string(),
+        amount_wei,
+        user_principal
+    ).await?;
+    ic_cdk::println!("✅ Step 7 Complete: {} allowance confirmed for AAVE Pool", token_info.symbol);
+    
+    // 8. Handle nonce management
+    ic_cdk::println!("✅ Step 8: Getting transaction nonce...");
+    let maybe_nonce = AAVE_NONCE.with_borrow(|maybe_nonce| {
+        maybe_nonce.map(|nonce| nonce + 1)
+    });
+
+    let nonce = if let Some(nonce) = maybe_nonce {
+        ic_cdk::println!("✅ Step 8: Using cached nonce: {}", nonce);
+        nonce
+    } else {
+        let fresh_nonce = provider.get_transaction_count(address).await
+            .map_err(|e| format!("Failed to get nonce: {}", e))?;
+        ic_cdk::println!("✅ Step 8: Got fresh nonce from network: {}", fresh_nonce);
+        fresh_nonce
+    };
+    
+    // 9. Execute supply to AAVE
+    ic_cdk::println!("✅ Step 9: Preparing AAVE supply transaction...");
+    let pool_address = address!("6Ae43d3271ff6888e7Fc43Fd7321a503ff738951");
+    let pool_contract = AavePool::new(pool_address, provider.clone());
+    
+    ic_cdk::println!("📋 AAVE Supply Parameters:");
+    ic_cdk::println!("  - Pool Address: 0x{:x}", pool_address);
+    ic_cdk::println!("  - Token Address: {}", token_address);
+    ic_cdk::println!("  - Token Symbol: {}", token_info.symbol);
+    ic_cdk::println!("  - Amount: {} wei", amount_wei);
+    ic_cdk::println!("  - User Address: 0x{:x}", address);
+    ic_cdk::println!("  - Nonce: {}", nonce);
+    ic_cdk::println!("  - Chain ID: 11155111 (Sepolia)");
+    
+    ic_cdk::println!("🚀 Sending AAVE supply transaction...");
+    
+    let call_builder = pool_contract
+        .supply(token_info.address, amount_wei, address, 0u16)
+        .nonce(nonce)
+        .chain_id(11155111) // Sepolia chain ID
+        .from(address);
+    
+    // Send with increased gas limit
+    match call_builder
+        .gas(1_000_000u128)
+        .send()
+        .await
+    {
+        Ok(builder) => {
+            let tx_hash = *builder.tx_hash();
+            ic_cdk::println!("✅ Step 9 Complete: Transaction sent with hash: {:?}", tx_hash);
+            
+            ic_cdk::println!("✅ Step 10: Waiting for transaction confirmation...");
+            let tx_response = provider.get_transaction_by_hash(tx_hash).await
+                .map_err(|e| {
+                    let error_msg = format!("Failed to get transaction: {}", e);
+                    ic_cdk::println!("❌ Step 10 Failed: {}", error_msg);
+                    error_msg
+                })?;
+
+            match tx_response {
+                Some(tx) => {
+                    ic_cdk::println!("✅ Step 10 Complete: Transaction confirmed in block");
+                    ic_cdk::println!("📋 Transaction Details:");
+                    ic_cdk::println!("  - Hash: {:?}", tx_hash);
+                    ic_cdk::println!("  - Block: {:?}", tx.block_number);
+                    ic_cdk::println!("  - Gas Used: {:?}", tx.gas);
+                    ic_cdk::println!("  - Nonce: {}", tx.nonce);
+                    
+                    // Update nonce cache
+                    AAVE_NONCE.with_borrow_mut(|nonce| {
+                        *nonce = Some(tx.nonce);
+                    });
+                    ic_cdk::println!("✅ Step 11: Nonce cache updated to {}", tx.nonce);
+                    
+                    // Update daily usage
+                    ic_cdk::println!("✅ Step 12: Updating daily usage limits...");
+                    if let Err(e) = set_daily_usage(permissions_id, AAVE_POOL_ADDRESS.to_string(), amount_wei.to::<u64>(), user_principal) {
+                        ic_cdk::println!("⚠️ Warning: Failed to update daily usage: {}", e);
+                    } else {
+                        ic_cdk::println!("✅ Step 12 Complete: Daily usage limits updated");
+                    }
+                    
+                    let success_msg = format!("Successfully supplied {} {} to AAVE. Transaction: {:?}", 
+                                            amount_human, token_info.symbol, tx_hash);
+                    ic_cdk::println!("🎉 AAVE token supply completed successfully: {}", success_msg);
+                    Ok(success_msg)
+                }
+                None => {
+                    let error_msg = "Transaction not found after sending".to_string();
+                    ic_cdk::println!("❌ Step 10 Failed: {}", error_msg);
+                    Err(error_msg)
+                }
+            }
+        }
+        Err(e) => {
+            ic_cdk::println!("❌ Step 9 Failed: Supply transaction failed: {:?}", e);
+            
+            // Try to decode specific AAVE errors
+            let error_str = e.to_string();
+            let decoded_error = if error_str.contains("execution reverted") {
+                "AAVE execution reverted - possible causes: insufficient allowance, reserve frozen, invalid parameters, or gas limit too low"
+            } else if error_str.contains("RESERVE_FROZEN") {
+                "AAVE reserve is frozen"
+            } else if error_str.contains("AMOUNT_BIGGER_THAN_MAX_LOAN_SIZE_STABLE") {
+                "Amount exceeds max loan size"
+            } else if error_str.contains("NO_MORE_RESERVES_ALLOWED") {
+                "No more reserves allowed"
+            } else if error_str.contains("INVALID_AMOUNT") {
+                "Invalid amount provided"
+            } else {
+                "Unknown AAVE error"
+            };
+            
+            ic_cdk::println!("🔍 Decoded error: {}", decoded_error);
+            ic_cdk::println!("💡 Suggestion: Check if token is supported by AAVE and if reserves are active");
+            
+            Err(format!("Supply transaction failed: {:?} | Decoded: {}", e, decoded_error))
+        }
+    }
 } 
