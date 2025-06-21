@@ -47,6 +47,7 @@ type CreatePermissionsRequest = record {
     whitelisted_protocols: vec Protocol;
     whitelisted_tokens: vec Token;
     transfer_limits: vec TransferLimit;
+    protocol_permissions: opt vec ProtocolPermission; // 🆕 Protocol permissions when creating
 };
 
 type UpdatePermissionsRequest = record {

@@ -64,17 +64,17 @@ pub async fn supply_link_to_aave_with_permissions(
 ) -> Result<String, String> {
     ic_cdk::println!("🚀 Starting AAVE LINK supply: {} LINK for principal {}", amount_human, user_principal);
     
-    // 1. Проверяем разрешения
+    // 1. Check permissions
     ic_cdk::println!("✅ Step 1: Verifying AAVE permissions...");
     verify_aave_permission(&permissions_id, "supply", &amount_human, user_principal).await?;
     ic_cdk::println!("✅ Step 1 Complete: AAVE permissions verified");
     
-    // 2. Конвертируем amount (LINK has 18 decimals)
+    // 2. Convert amount (LINK has 18 decimals)
     ic_cdk::println!("✅ Step 2: Converting amount {} LINK to wei...", amount_human);
     let amount_wei = parse_link_amount(&amount_human)?;
     ic_cdk::println!("✅ Step 2 Complete: Amount converted to {} wei", amount_wei);
     
-    // 3. Создаем signer от имени пользователя
+    // 3. Create signer on behalf of user
     ic_cdk::println!("✅ Step 3: Creating ICP signer for principal...");
     let signer = create_icp_signer_for_principal(user_principal).await?;
     let address = signer.address();
@@ -91,7 +91,7 @@ pub async fn supply_link_to_aave_with_permissions(
         .on_icp(config);
     ic_cdk::println!("✅ Step 4 Complete: Provider and wallet configured");
     
-    // 5. Проверяем баланс LINK
+    // 5. Check LINK balance
     ic_cdk::println!("✅ Step 5: Checking LINK balance for address 0x{:x}...", address);
     let link_balance = get_link_balance_for_address(format!("0x{:x}", address)).await?;
     let link_balance_wei = U256::from_str_radix(&link_balance.replace("0x", ""), 16)
@@ -105,7 +105,7 @@ pub async fn supply_link_to_aave_with_permissions(
         return Err(error_msg);
     }
     
-    // 6. Проверяем/устанавливаем allowance для AAVE Pool
+    // 6. Check/set allowance for AAVE Pool
     ic_cdk::println!("✅ Step 6: Ensuring LINK allowance for AAVE Pool...");
     ensure_link_allowance_for_aave(&provider, amount_wei, address).await?;
     ic_cdk::println!("✅ Step 6 Complete: LINK allowance confirmed for AAVE Pool");
@@ -126,7 +126,7 @@ pub async fn supply_link_to_aave_with_permissions(
         fresh_nonce
     };
     
-    // 8. Выполняем supply в AAVE
+    // 8. Execute supply to AAVE
     ic_cdk::println!("✅ Step 8: Preparing AAVE supply transaction...");
     let pool_address = address!("6Ae43d3271ff6888e7Fc43Fd7321a503ff738951");
     let pool_contract = AavePool::new(pool_address, provider.clone());
@@ -143,7 +143,7 @@ pub async fn supply_link_to_aave_with_permissions(
     
     ic_cdk::println!("🚀 Sending AAVE supply transaction...");
     
-    // Попробуем сначала estimate gas
+    // Try to estimate gas first
     ic_cdk::println!("📊 Estimating gas for transaction...");
     let call_builder = pool_contract
         .supply(link_address, amount_wei, address, 0u16)
@@ -151,9 +151,9 @@ pub async fn supply_link_to_aave_with_permissions(
         .chain_id(11155111) // Sepolia chain ID
         .from(address);
     
-    // Отправляем с увеличенным gas limit
+    // Send with increased gas limit
     match call_builder
-        .gas(1_000_000u128) // Увеличиваем gas limit еще больше
+        .gas(1_000_000u128) // Increase gas limit even more
         .send()
         .await
     {
@@ -184,7 +184,7 @@ pub async fn supply_link_to_aave_with_permissions(
                     });
                     ic_cdk::println!("✅ Step 10: Nonce cache updated to {}", tx.nonce);
                     
-                    // Обновляем daily usage
+                    // Update daily usage
                     ic_cdk::println!("✅ Step 11: Updating daily usage limits...");
                     if let Err(e) = set_daily_usage(permissions_id, AAVE_POOL_ADDRESS.to_string(), amount_wei.to::<u64>(), user_principal) {
                         ic_cdk::println!("⚠️ Warning: Failed to update daily usage: {}", e);
@@ -206,7 +206,7 @@ pub async fn supply_link_to_aave_with_permissions(
         Err(e) => {
             ic_cdk::println!("❌ Step 8 Failed: Supply transaction failed: {:?}", e);
             
-            // Попробуем декодировать специфичные ошибки AAVE
+            // Try to decode specific AAVE errors
             let error_str = e.to_string();
             let decoded_error = if error_str.contains("execution reverted") {
                 "AAVE execution reverted - possible causes: insufficient allowance, reserve frozen, invalid parameters, or gas limit too low"
@@ -238,17 +238,17 @@ pub async fn withdraw_link_from_aave_with_permissions(
 ) -> Result<String, String> {
     ic_cdk::println!("🚀 Starting AAVE LINK withdraw: {} LINK for principal {}", amount_human, user_principal);
     
-    // 1. Проверяем разрешения
+    // 1. Check permissions
     ic_cdk::println!("✅ Step 1: Verifying AAVE withdraw permissions...");
     verify_aave_permission(&permissions_id, "withdraw", &amount_human, user_principal).await?;
     ic_cdk::println!("✅ Step 1 Complete: AAVE withdraw permissions verified");
     
-    // 2. Конвертируем amount
+    // 2. Convert amount
     ic_cdk::println!("✅ Step 2: Converting amount {} LINK to wei...", amount_human);
     let amount_wei = parse_link_amount(&amount_human)?;
     ic_cdk::println!("✅ Step 2 Complete: Amount converted to {} wei", amount_wei);
     
-    // 3. Создаем signer от имени пользователя
+    // 3. Create signer on behalf of user
     ic_cdk::println!("✅ Step 3: Creating ICP signer for principal...");
     let signer = create_icp_signer_for_principal(user_principal).await?;
     let address = signer.address();
@@ -265,7 +265,7 @@ pub async fn withdraw_link_from_aave_with_permissions(
         .on_icp(config);
     ic_cdk::println!("✅ Step 4 Complete: Provider and wallet configured");
     
-    // 5. Проверяем баланс aLINK (получаем через getReserveData)
+    // 5. Check aLINK balance (get through getReserveData)
     ic_cdk::println!("✅ Step 5: Checking aLINK balance for address 0x{:x}...", address);
     let alink_balance = get_alink_balance_for_address(format!("0x{:x}", address)).await?;
     let alink_balance_wei = U256::from_str_radix(&alink_balance.replace("0x", ""), 16)
@@ -295,7 +295,7 @@ pub async fn withdraw_link_from_aave_with_permissions(
         fresh_nonce
     };
     
-    // 7. Выполняем withdraw из AAVE
+    // 7. Execute withdraw from AAVE
     ic_cdk::println!("✅ Step 7: Preparing AAVE withdraw transaction...");
     let pool_address = address!("6Ae43d3271ff6888e7Fc43Fd7321a503ff738951");
     let pool_contract = AavePool::new(pool_address, provider.clone());
@@ -312,7 +312,7 @@ pub async fn withdraw_link_from_aave_with_permissions(
     
     ic_cdk::println!("🚀 Sending AAVE withdraw transaction...");
     
-    // Попробуем сначала estimate gas
+    // Try to estimate gas first
     ic_cdk::println!("📊 Estimating gas for withdraw transaction...");
     let call_builder = pool_contract
         .withdraw(link_address, amount_wei, address)
@@ -320,9 +320,9 @@ pub async fn withdraw_link_from_aave_with_permissions(
         .chain_id(11155111) // Sepolia chain ID
         .from(address);
     
-    // Отправляем с увеличенным gas limit
+    // Send with increased gas limit
     match call_builder
-        .gas(1_000_000u128) // Увеличиваем gas limit
+        .gas(1_000_000u128) // Increase gas limit even more
         .send()
         .await
     {
@@ -353,7 +353,7 @@ pub async fn withdraw_link_from_aave_with_permissions(
                     });
                     ic_cdk::println!("✅ Step 9: Nonce cache updated to {}", tx.nonce);
                     
-                    // Обновляем daily usage
+                    // Update daily usage
                     ic_cdk::println!("✅ Step 10: Updating daily usage limits...");
                     if let Err(e) = set_daily_usage(permissions_id, AAVE_POOL_ADDRESS.to_string(), amount_wei.to::<u64>(), user_principal) {
                         ic_cdk::println!("⚠️ Warning: Failed to update daily usage: {}", e);
@@ -375,7 +375,7 @@ pub async fn withdraw_link_from_aave_with_permissions(
         Err(e) => {
             ic_cdk::println!("❌ Step 7 Failed: Withdraw transaction failed: {:?}", e);
             
-            // Попробуем декодировать специфичные ошибки AAVE
+            // Try to decode specific AAVE errors
             let error_str = e.to_string();
             let decoded_error = if error_str.contains("execution reverted") {
                 "AAVE execution reverted - possible causes: insufficient aToken balance, reserve paused, invalid parameters, or gas limit too low"
@@ -420,22 +420,22 @@ pub async fn get_aave_link_balance(address: Option<String>) -> Result<String, St
 
 // Helper functions
 
-/// Проверить AAVE разрешения
+/// Check AAVE permissions
 async fn verify_aave_permission(
     permissions_id: &str,
     function_name: &str,
     amount_human: &str,
     user_principal: Principal
 ) -> Result<(), String> {
-    // Проверяем ownership permissions
+    // Check ownership permissions
     if let Err(e) = is_permissions_owner(permissions_id, user_principal) {
         return Err(e);
     }
     
-    // Конвертируем amount
+    // Convert amount
     let amount_wei = parse_link_amount(amount_human)?.to::<u64>();
     
-    // Проверяем protocol permission
+    // Check protocol permission
     verify_protocol_permission(
         permissions_id.to_string(),
         AAVE_POOL_ADDRESS.to_string(),
@@ -445,7 +445,7 @@ async fn verify_aave_permission(
     ).map(|_| ())
 }
 
-/// Парсинг LINK amount (18 decimals)
+/// Parse LINK amount (18 decimals)
 fn parse_link_amount(amount_human: &str) -> Result<U256, String> {
     let amount_f64: f64 = amount_human.parse()
         .map_err(|_| "Invalid amount format".to_string())?;
@@ -459,19 +459,19 @@ fn parse_link_amount(amount_human: &str) -> Result<U256, String> {
     Ok(U256::from(amount_wei))
 }
 
-/// Получить LINK баланс для адреса
+/// Get LINK balance for address
 async fn get_link_balance_for_address(address: String) -> Result<String, String> {
     get_balance_link(Some(address)).await
 }
 
-/// Получить aLINK баланс для адреса
+/// Get aLINK balance for address
 async fn get_alink_balance_for_address(address: String) -> Result<String, String> {
-    // Создаем provider без signer для read-only операций
+    // Create provider without signer for read-only operations
     let rpc_service = get_rpc_service_sepolia();
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new().on_icp(config);
     
-    // Получаем reserve data для LINK
+    // Get reserve data for LINK
     let pool_address = address!("6Ae43d3271ff6888e7Fc43Fd7321a503ff738951");
     let pool_contract = AavePool::new(pool_address, provider.clone());
     
@@ -480,10 +480,10 @@ async fn get_alink_balance_for_address(address: String) -> Result<String, String
     let reserve_data = pool_contract.getReserveData(link_address).call().await
         .map_err(|e| format!("Failed to get reserve data: {}", e))?;
     
-    // aToken address находится в структуре reserve data
+    // aToken address is in reserve data
     let alink_address = reserve_data._0.aTokenAddress;
     
-    // Получаем баланс aLINK
+    // Get aLINK balance
     let link_contract = LINK::new(alink_address, provider);
     let user_address = address.parse::<Address>()
         .map_err(|_| "Invalid user address".to_string())?;
@@ -494,7 +494,7 @@ async fn get_alink_balance_for_address(address: String) -> Result<String, String
     Ok(format!("0x{:x}", balance._0))
 }
 
-/// Обеспечить достаточный allowance для AAVE Pool
+/// Ensure sufficient allowance for AAVE Pool
 async fn ensure_link_allowance_for_aave(
     provider: &alloy::providers::fillers::FillProvider<
         alloy::providers::fillers::JoinFill<
@@ -522,7 +522,7 @@ async fn ensure_link_allowance_for_aave(
     
     let link_contract = LINK::new(link_address, provider);
     
-    // Проверяем текущий allowance
+    // Check current allowance
     ic_cdk::println!("📞 Calling LINK.allowance()...");
     let current_allowance = link_contract.allowance(user_address, pool_address).call().await
         .map_err(|e| {
@@ -551,7 +551,7 @@ async fn ensure_link_allowance_for_aave(
             fresh_nonce
         };
         
-        // Увеличиваем allowance
+        // Increase allowance
         ic_cdk::println!("🚀 Sending LINK approval transaction...");
         ic_cdk::println!("📋 Approval Parameters:");
         ic_cdk::println!("  - Spender (AAVE Pool): 0x{:x}", pool_address);

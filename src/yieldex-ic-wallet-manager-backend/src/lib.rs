@@ -48,7 +48,7 @@ pub struct TransferLimit {
     max_tx_amount: u64,
 }
 
-// 🆕 Новый тип для protocol permissions (Задача 1.1)
+// 🆕 New type for protocol permissions (Task 1.1)
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct ProtocolPermission {
     pub protocol_address: String,
@@ -56,7 +56,7 @@ pub struct ProtocolPermission {
     pub max_amount_per_tx: Option<u64>,
     pub daily_limit: Option<u64>,
     pub total_used_today: u64,
-    pub last_reset_date: u64, // Timestamp для сброса daily limit
+    pub last_reset_date: u64, // Timestamp for daily limit reset
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -72,7 +72,7 @@ pub struct Permissions {
     whitelisted_protocols: Vec<Protocol>,
     whitelisted_tokens: Vec<Token>,
     transfer_limits: Vec<TransferLimit>,
-    protocol_permissions: Vec<ProtocolPermission>, // 🆕 Новое поле (Задача 1.1)
+    protocol_permissions: Vec<ProtocolPermission>, // 🆕 New field (Task 1.1)
     created_at: u64,
     updated_at: u64,
 }
@@ -82,6 +82,7 @@ pub struct CreatePermissionsRequest {
     whitelisted_protocols: Vec<Protocol>,
     whitelisted_tokens: Vec<Token>,
     transfer_limits: Vec<TransferLimit>,
+    protocol_permissions: Option<Vec<ProtocolPermission>>, // 🆕 Add protocol permissions
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
@@ -275,7 +276,7 @@ async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions
         whitelisted_protocols: req.whitelisted_protocols,
         whitelisted_tokens: req.whitelisted_tokens,
         transfer_limits: req.transfer_limits,
-        protocol_permissions: Vec::new(),
+        protocol_permissions: req.protocol_permissions.unwrap_or_default(),
         created_at: timestamp,
         updated_at: timestamp,
     };
@@ -389,9 +390,9 @@ fn delete_permissions(permissions_id: String) -> Result<bool, String> {
     }
 }
 
-// 🆕 Новые функции для protocol permissions (Задача 1.1) - используют permissions сервис
+// 🆕 New functions for protocol permissions (Task 1.1) - use permissions service
 
-/// Проверить разрешение на выполнение операции с протоколом
+/// Check permission to perform protocol operation
 #[query]
 fn check_protocol_permission(
     permissions_id: String, 
@@ -403,7 +404,7 @@ fn check_protocol_permission(
     verify_protocol_permission(permissions_id, protocol_address, function_name, amount, caller)
 }
 
-/// Добавить разрешение для протокола
+/// Add permission for protocol
 #[update] 
 fn update_protocol_permission(
     permissions_id: String,
@@ -413,7 +414,7 @@ fn update_protocol_permission(
     add_protocol_permission(permissions_id, protocol_permission, caller)
 }
 
-/// Обновить использованный лимит за сегодня
+/// Update used limit for today
 #[update]
 fn update_daily_usage(
     permissions_id: String,

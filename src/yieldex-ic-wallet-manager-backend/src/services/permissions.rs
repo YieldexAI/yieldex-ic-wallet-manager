@@ -3,7 +3,7 @@ use crate::{
     Permissions, ProtocolPermission, PERMISSIONS_MAP, StorableString, StorablePermissions, now
 };
 
-/// Проверить является ли caller владельцем permissions
+/// Check if caller is the owner of permissions
 pub fn is_permissions_owner(permissions_id: &str, caller: Principal) -> Result<bool, String> {
     PERMISSIONS_MAP.with(|map| {
         map.borrow()
@@ -21,7 +21,7 @@ pub fn is_permissions_owner(permissions_id: &str, caller: Principal) -> Result<b
     })
 }
 
-/// Проверить daily limits и per-transaction limits для протокола
+/// Check daily limits and per-transaction limits for protocol
 pub fn check_daily_limits(
     permissions: &Permissions,
     protocol_address: &str,
@@ -31,13 +31,13 @@ pub fn check_daily_limits(
     
     for perm in &permissions.protocol_permissions {
         if perm.protocol_address == protocol_address {
-            // Проверяем сброс daily limit
+            // Check daily limit reset
             if let Some(daily_limit) = perm.daily_limit {
-                let today_start = now - (now % 86400); // Начало дня
+                let today_start = now - (now % 86400); // Start of day
                 let mut used_today = perm.total_used_today;
                 
                 if perm.last_reset_date < today_start {
-                    used_today = 0; // Сбрасываем счетчик
+                    used_today = 0; // Reset counter
                 }
                 
                 if used_today + amount > daily_limit {
@@ -46,7 +46,7 @@ pub fn check_daily_limits(
                 }
             }
             
-            // Проверяем per-transaction limit
+            // Check per-transaction limit
             if let Some(max_tx) = perm.max_amount_per_tx {
                 if amount > max_tx {
                     return Err(format!("Transaction amount {} exceeds max limit {}", amount, max_tx));
@@ -60,7 +60,7 @@ pub fn check_daily_limits(
     Err("Protocol not found in permissions".to_string())
 }
 
-/// Проверить разрешение на выполнение операции с протоколом
+/// Check permission to perform protocol operation
 pub fn verify_protocol_permission(
     permissions_id: String, 
     protocol_address: String, 
@@ -68,12 +68,12 @@ pub fn verify_protocol_permission(
     amount: u64,
     caller: Principal
 ) -> Result<bool, String> {
-    // Проверяем ownership
+    // Check ownership
     if let Err(e) = is_permissions_owner(&permissions_id, caller) {
         return Err(e);
     }
     
-    // Получаем permissions
+    // Get permissions
     let permissions = PERMISSIONS_MAP.with(|map| {
         map.borrow()
             .get(&StorableString(permissions_id.clone()))
@@ -81,15 +81,15 @@ pub fn verify_protocol_permission(
             .ok_or_else(|| "Permissions not found".to_string())
     })?;
     
-    // Ищем protocol permission
+    // Search for protocol permission
     for perm in &permissions.protocol_permissions {
         if perm.protocol_address == protocol_address {
-            // Проверяем разрешенные функции
+            // Check allowed functions
             if !perm.allowed_functions.contains(&function_name) {
                 return Err(format!("Function '{}' not allowed for protocol {}", function_name, protocol_address));
             }
             
-            // Проверяем лимиты
+            // Check
             return check_daily_limits(&permissions, &protocol_address, amount);
         }
     }
@@ -97,18 +97,18 @@ pub fn verify_protocol_permission(
     Err(format!("Protocol {} not found in permissions", protocol_address))
 }
 
-/// Добавить разрешение для протокола
+/// Add permission for protocol
 pub fn add_protocol_permission(
     permissions_id: String,
     protocol_permission: ProtocolPermission,
     caller: Principal
 ) -> Result<bool, String> {
-    // Проверяем ownership
+    // Check ownership
     if let Err(e) = is_permissions_owner(&permissions_id, caller) {
         return Err(e);
     }
     
-    // Получаем и обновляем permissions
+    // Get and update permissions
     let mut permissions = PERMISSIONS_MAP.with(|map| {
         map.borrow()
             .get(&StorableString(permissions_id.clone()))
@@ -116,18 +116,18 @@ pub fn add_protocol_permission(
             .ok_or_else(|| "Permissions not found".to_string())
     })?;
     
-    // Проверяем, не существует ли уже permission для этого протокола
+    // Check if permission already exists for this protocol
     for perm in &permissions.protocol_permissions {
         if perm.protocol_address == protocol_permission.protocol_address {
             return Err(format!("Protocol permission for {} already exists", protocol_permission.protocol_address));
         }
     }
     
-    // Добавляем новое разрешение
+    // Add new permission
     permissions.protocol_permissions.push(protocol_permission);
     permissions.updated_at = now();
     
-    // Сохраняем обновленные permissions
+    // Save updated permissions
     PERMISSIONS_MAP.with(|map| {
         map.borrow_mut().insert(
             StorableString(permissions_id), 
@@ -138,19 +138,19 @@ pub fn add_protocol_permission(
     Ok(true)
 }
 
-/// Обновить использованный лимит за сегодня
+/// Update used limit for today
 pub fn set_daily_usage(
     permissions_id: String,
     protocol_address: String,
     amount_used: u64,
     caller: Principal
 ) -> Result<bool, String> {
-    // Проверяем ownership
+    // Check ownership
     if let Err(e) = is_permissions_owner(&permissions_id, caller) {
         return Err(e);
     }
     
-    // Получаем permissions
+    // Get permissions
     let mut permissions = PERMISSIONS_MAP.with(|map| {
         map.borrow()
             .get(&StorableString(permissions_id.clone()))
@@ -159,22 +159,22 @@ pub fn set_daily_usage(
     })?;
     
     let now = ic_cdk::api::time() / 1_000_000;
-    let today_start = now - (now % 86400); // Начало дня
+    let today_start = now - (now % 86400); // Start of day
     
-    // Ищем и обновляем protocol permission
+    // Search and update protocol permission
     for perm in &mut permissions.protocol_permissions {
         if perm.protocol_address == protocol_address {
-            // Сбрасываем счетчик если начался новый день
+            // Reset counter if new day started
             if perm.last_reset_date < today_start {
                 perm.total_used_today = 0;
                 perm.last_reset_date = today_start;
             }
             
-            // Обновляем использованную сумму
+            // Update used amount
             perm.total_used_today += amount_used;
             permissions.updated_at = now;
             
-            // Сохраняем обновленные permissions
+            // Save updated permissions
             PERMISSIONS_MAP.with(|map| {
                 map.borrow_mut().insert(
                     StorableString(permissions_id), 

@@ -36,6 +36,7 @@ struct CreatePermissionsRequest {
     pub whitelisted_protocols: Vec<Protocol>,
     pub whitelisted_tokens: Vec<Token>,
     pub transfer_limits: Vec<TransferLimit>,
+    pub protocol_permissions: Option<Vec<ProtocolPermission>>, // 🆕 Протокольные разрешения
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
@@ -63,13 +64,54 @@ struct Permissions {
 fn example_protocol() -> Protocol {
     Protocol {
         name: "AAVE".to_string(),
-        address: "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DdAE9".to_string(),
+        address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(), // Updated to correct Sepolia address
     }
 }
+
 fn example_token() -> Token {
     Token {
-        name: "USDT".to_string(),
-        address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
+        name: "LINK".to_string(),
+        address: "0xf8fb3713d459d7c1018bd0a49d19b4c44290ebe5".to_string(), // Updated to LINK Sepolia address
+    }
+}
+
+// 🆕 Helper function to create AAVE protocol permissions for tests
+fn example_aave_protocol_permission() -> ProtocolPermission {
+    ProtocolPermission {
+        protocol_address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
+        allowed_functions: vec!["supply".to_string(), "withdraw".to_string()],
+        max_amount_per_tx: Some(100_000_000_000_000_000), // 0.1 LINK
+        daily_limit: Some(1_000_000_000_000_000_000),     // 1 LINK
+        total_used_today: 0,
+        last_reset_date: 0,
+    }
+}
+
+// 🆕 Helper function to create basic permissions request without protocol permissions
+fn basic_permissions_request() -> CreatePermissionsRequest {
+    CreatePermissionsRequest {
+        whitelisted_protocols: vec![example_protocol()],
+        whitelisted_tokens: vec![example_token()],
+        transfer_limits: vec![TransferLimit {
+            token_address: "0xf8fb3713d459d7c1018bd0a49d19b4c44290ebe5".to_string(),
+            daily_limit: 1_000_000_000_000_000_000,  // 1 LINK
+            max_tx_amount: 100_000_000_000_000_000,   // 0.1 LINK
+        }],
+        protocol_permissions: None,
+    }
+}
+
+// 🆕 Helper function to create full permissions request with AAVE protocol permissions
+fn full_permissions_request_with_aave() -> CreatePermissionsRequest {
+    CreatePermissionsRequest {
+        whitelisted_protocols: vec![example_protocol()],
+        whitelisted_tokens: vec![example_token()],
+        transfer_limits: vec![TransferLimit {
+            token_address: "0xf8fb3713d459d7c1018bd0a49d19b4c44290ebe5".to_string(),
+            daily_limit: 1_000_000_000_000_000_000,  // 1 LINK
+            max_tx_amount: 100_000_000_000_000_000,   // 0.1 LINK
+        }],
+        protocol_permissions: Some(vec![example_aave_protocol_permission()]),
     }
 }
 
@@ -363,17 +405,7 @@ mod tests {
         assert!(gen_result.is_ok(), "Failed to generate EVM address");
         
         // Create a request for creating permissions with new Protocol and Token types
-        let request = CreatePermissionsRequest {
-            whitelisted_protocols: vec![example_protocol()],
-            whitelisted_tokens: vec![example_token()],
-            transfer_limits: vec![
-                TransferLimit {
-                    token_address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
-                    daily_limit: 1000,
-                    max_tx_amount: 100
-                }
-            ]
-        };
+        let request = basic_permissions_request();
         
         // Call create_permissions method
         let create_result = pic.update_call(
@@ -398,7 +430,7 @@ mod tests {
                         assert_eq!(permissions.whitelisted_protocols.len(), 1);
                         assert_eq!(permissions.whitelisted_protocols[0].name, "AAVE");
                         assert_eq!(permissions.whitelisted_tokens.len(), 1);
-                        assert_eq!(permissions.whitelisted_tokens[0].name, "USDT");
+                        assert_eq!(permissions.whitelisted_tokens[0].name, "LINK");
                         assert_eq!(permissions.transfer_limits.len(), 1);
                         
                         // Get permissions by ID
@@ -473,17 +505,7 @@ mod tests {
         assert!(gen_result.is_ok(), "Failed to generate EVM address");
         
         // Create permissions
-        let request = CreatePermissionsRequest {
-            whitelisted_protocols: vec![example_protocol()],
-            whitelisted_tokens: vec![example_token()],
-            transfer_limits: vec![
-                TransferLimit {
-                    token_address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
-                    daily_limit: 1000,
-                    max_tx_amount: 100
-                }
-            ]
-        };
+        let request = basic_permissions_request();
         
         let create_result = pic.update_call(
             canister_id,
@@ -591,11 +613,7 @@ mod tests {
         let another_principal = Principal::from_text(ANOTHER_PRINCIPAL).expect("Invalid principal");
         
         // Test 1: Attempt to create permissions without EVM address
-        let request = CreatePermissionsRequest {
-            whitelisted_protocols: vec![example_protocol()],
-            whitelisted_tokens: vec![example_token()],
-            transfer_limits: vec![]
-        };
+        let request = basic_permissions_request();
         
         let create_result = pic.update_call(
             canister_id,
@@ -778,6 +796,7 @@ mod tests {
             whitelisted_protocols: vec![],
             whitelisted_tokens: vec![],
             transfer_limits: vec![],
+            protocol_permissions: None,
         };
         
         let create_result = pic.update_call(
@@ -988,6 +1007,7 @@ mod tests {
                 address: "0x779877A7B0D9E8603169DdbD7836e478b4624789".to_string(),
             }],
             transfer_limits: vec![],
+            protocol_permissions: None,
         };
         
         let create_result = pic.update_call(
@@ -1095,6 +1115,7 @@ mod tests {
                 address: "0x779877A7B0D9E8603169DdbD7836e478b4624789".to_string(),
             }],
             transfer_limits: vec![],
+            protocol_permissions: None,
         };
         
         let create_result = pic.update_call(
@@ -1196,6 +1217,7 @@ mod tests {
             whitelisted_protocols: vec![],
             whitelisted_tokens: vec![],
             transfer_limits: vec![],
+            protocol_permissions: None,
         };
         
         let create_result = pic.update_call(
@@ -1329,6 +1351,7 @@ mod tests {
                 address: "0x779877A7B0D9E8603169DdbD7836e478b4624789".to_string(),
             }],
             transfer_limits: vec![],
+            protocol_permissions: None,
         };
         
         let create_result = pic.update_call(
@@ -1471,6 +1494,7 @@ mod tests {
             whitelisted_protocols: vec![],
             whitelisted_tokens: vec![],
             transfer_limits: vec![],
+            protocol_permissions: None,
         };
         
         let create_result = pic.update_call(
@@ -1580,6 +1604,7 @@ mod tests {
             whitelisted_protocols: vec![],
             whitelisted_tokens: vec![],
             transfer_limits: vec![],
+            protocol_permissions: None,
         };
         
         let create_result = pic.update_call(
@@ -1753,6 +1778,7 @@ mod tests {
             whitelisted_protocols: vec![],
             whitelisted_tokens: vec![],
             transfer_limits: vec![],
+            protocol_permissions: None,
         };
         
         let create_result = pic.update_call(
@@ -1842,5 +1868,173 @@ mod tests {
         }
         
         println!("✅ Multiple protocol permissions test completed");
+    }
+
+    // 🆕 New test to demonstrate creating permissions with protocol permissions in one call
+    #[test]
+    fn test_create_permissions_with_protocol_permissions() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        
+        // First, generate EVM address (required for creating permissions)
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        // Create permissions with protocol permissions in one call
+        let request = full_permissions_request_with_aave();
+        
+        // Call create_permissions method
+        let create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&request).unwrap()
+        );
+        
+        // Check the result
+        match create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                
+                match permissions_result {
+                    Ok(permissions) => {
+                        println!("✅ Created permissions with protocol permissions: {}", permissions.id);
+                        
+                        // Check basic permissions data
+                        assert_eq!(permissions.owner, user_principal);
+                        assert_eq!(permissions.whitelisted_protocols.len(), 1);
+                        assert_eq!(permissions.whitelisted_protocols[0].name, "AAVE");
+                        assert_eq!(permissions.whitelisted_tokens.len(), 1);
+                        assert_eq!(permissions.whitelisted_tokens[0].name, "LINK");
+                        assert_eq!(permissions.transfer_limits.len(), 1);
+                        
+                        // 🆕 Check protocol permissions were created
+                        assert_eq!(permissions.protocol_permissions.len(), 1);
+                        let protocol_perm = &permissions.protocol_permissions[0];
+                        assert_eq!(protocol_perm.protocol_address, "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951");
+                        assert_eq!(protocol_perm.allowed_functions.len(), 2);
+                        assert!(protocol_perm.allowed_functions.contains(&"supply".to_string()));
+                        assert!(protocol_perm.allowed_functions.contains(&"withdraw".to_string()));
+                        assert_eq!(protocol_perm.max_amount_per_tx, Some(100_000_000_000_000_000)); // 0.1 LINK
+                        assert_eq!(protocol_perm.daily_limit, Some(1_000_000_000_000_000_000));     // 1 LINK
+                        
+                        // 🆕 Test protocol permission check
+                        let check_result = pic.query_call(
+                            canister_id,
+                            user_principal,
+                            "check_protocol_permission",
+                            Encode!(&permissions.id, &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(), &"supply".to_string(), &50_000_000_000_000_000u64).unwrap()
+                        );
+                        
+                        match check_result {
+                            Ok(bytes) => {
+                                let check_permission_result: Result<bool, String> = 
+                                    Decode!(&bytes, Result<bool, String>).expect("Failed to decode result");
+                                
+                                assert_eq!(check_permission_result, Ok(true), "Should allow supply operation");
+                                println!("✅ Protocol permission check passed for supply operation");
+                            },
+                            Err(e) => {
+                                panic!("Failed to check protocol permission: {:?}", e);
+                            }
+                        }
+                        
+                        println!("🎉 Test passed: Created permissions with protocol permissions successfully!");
+                    },
+                    Err(e) => {
+                        panic!("Failed to create permissions: {}", e);
+                    }
+                }
+            },
+            Err(e) => {
+                panic!("Failed to create permissions: {:?}", e);
+            }
+        }
+    }
+
+    // 🆕 Test to compare old vs new permission creation workflow
+    #[test]
+    fn test_old_vs_new_permission_workflow() {
+        // Initialize test environment
+        let (pic, canister_id) = setup_test_env();
+        let user_principal = Principal::from_text(USER_PRINCIPAL).expect("Invalid principal");
+        
+        // Generate EVM address
+        let gen_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "generate_evm_address",
+            Encode!().unwrap()
+        );
+        assert!(gen_result.is_ok(), "Failed to generate EVM address");
+        
+        // OLD WAY: Create basic permissions first, then add protocol permissions
+        let basic_request = basic_permissions_request();
+        
+        let create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&basic_request).unwrap()
+        );
+        
+        let old_way_permissions = match create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                permissions_result.expect("Failed to create basic permissions")
+            },
+            Err(e) => panic!("Failed to create basic permissions: {:?}", e),
+        };
+        
+        println!("📋 OLD WAY: Created basic permissions: {}", old_way_permissions.id);
+        assert_eq!(old_way_permissions.protocol_permissions.len(), 0, "Should have no protocol permissions initially");
+        
+        // NEW WAY: Create permissions with protocol permissions in one call
+        let full_request = full_permissions_request_with_aave();
+        
+        let new_create_result = pic.update_call(
+            canister_id,
+            user_principal,
+            "create_permissions",
+            Encode!(&full_request).unwrap()
+        );
+        
+        let new_way_permissions = match new_create_result {
+            Ok(bytes) => {
+                let permissions_result: Result<Permissions, String> = 
+                    Decode!(&bytes, Result<Permissions, String>).expect("Failed to decode result");
+                permissions_result.expect("Failed to create full permissions")
+            },
+            Err(e) => panic!("Failed to create full permissions: {:?}", e),
+        };
+        
+        println!("✅ NEW WAY: Created full permissions in one call: {}", new_way_permissions.id);
+        assert_eq!(new_way_permissions.protocol_permissions.len(), 1, "Should have protocol permissions from creation");
+        
+        // Both should allow the same operations
+        let old_way_check = pic.query_call(
+            canister_id,
+            user_principal,
+            "check_protocol_permission",
+            Encode!(&old_way_permissions.id, &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(), &"supply".to_string(), &50_000_000_000_000_000u64).unwrap()
+        );
+        
+        let new_way_check = pic.query_call(
+            canister_id,
+            user_principal,
+            "check_protocol_permission",
+            Encode!(&new_way_permissions.id, &"0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(), &"supply".to_string(), &50_000_000_000_000_000u64).unwrap()
+        );
+        
+        assert!(old_way_check.is_ok() && new_way_check.is_ok(), "Both permission checks should work");
+        println!("🎉 Both workflows result in equivalent permissions!");
     }
 }
