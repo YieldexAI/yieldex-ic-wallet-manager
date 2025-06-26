@@ -11,7 +11,7 @@
 
 *Revolutionizing DeFi with AI-powered cross-chain yield optimization through Internet Computer's ChainFusion technology*
 
-[🚀 **Live Demo**](https://lla3p-uyaaa-aaaap-an2ea-cai.icp0.io) • [📖 **Documentation**](./project_docs/) • [🧪 **Try It Now**](#-quick-start) • [💬 **Community**](#-community)
+[🚀 **Live Demo**](https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=lla3p-uyaaa-aaaap-an2ea-cai) • [🧪 **Try It Now**](https://github.com/YieldexAI/yieldex-ic-wallet-manager?tab=readme-ov-file#-quick-start-guide)
 
 </div>
 
@@ -172,13 +172,13 @@ dfx deploy --network ic
 
 ```bash
 # ✨ Create your unique EVM address using IC threshold ECDSA
-dfx canister call yieldex-ic-wallet-manager-backend generate_evm_address
+dfx canister call yieldex-ic-wallet-manager-backend generate_evm_address --ic   
 
 # 📋 Retrieve your stored address
-dfx canister call yieldex-ic-wallet-manager-backend get_evm_address
+dfx canister call yieldex-ic-wallet-manager-backend get_evm_address --ic
 
 # ✅ Verify user registration
-dfx canister call yieldex-ic-wallet-manager-backend verify_user '(principal "rdmx6-jaaaa-aaaah-qcaiq-cai")'
+dfx canister call yieldex-ic-wallet-manager-backend verify_user '(principal "rdmx6-jaaaa-aaaah-qcaiq-cai")' --ic
 ```
 
 </details>
@@ -190,16 +190,16 @@ dfx canister call yieldex-ic-wallet-manager-backend verify_user '(principal "rdm
 
 ```bash
 # 💎 Check your ETH balance
-dfx canister call yieldex-ic-wallet-manager-backend get_eth_balance '(null)'
+dfx canister call yieldex-ic-wallet-manager-backend get_eth_balance '(null)' --ic
 
 # 🏦 Monitor USDC holdings
-dfx canister call yieldex-ic-wallet-manager-backend get_usdc_balance '(null)'
+dfx canister call yieldex-ic-wallet-manager-backend get_usdc_balance '(null)' --ic
 
 # 🔗 Track LINK positions
-dfx canister call yieldex-ic-wallet-manager-backend get_link_balance '(null)'
+dfx canister call yieldex-ic-wallet-manager-backend get_link_balance '(null)' --ic
 
 # 🌊 View WETH portfolio
-dfx canister call yieldex-ic-wallet-manager-backend get_weth_token_balance '(null)'
+dfx canister call yieldex-ic-wallet-manager-backend get_weth_token_balance '(null)' --ic
 ```
 
 </details>
@@ -211,13 +211,13 @@ dfx canister call yieldex-ic-wallet-manager-backend get_weth_token_balance '(nul
 
 ```bash
 # 📈 Supply LINK to AAVE and start earning yield
-dfx canister call yieldex-ic-wallet-manager-backend supply_link_to_aave_secured '("0.1", "your-permissions-id")'
+dfx canister call yieldex-ic-wallet-manager-backend supply_link_to_aave_secured '("0.1", "your-permissions-id")' --ic
 
 # 💰 Withdraw your LINK + earned yield
-dfx canister call yieldex-ic-wallet-manager-backend withdraw_link_from_aave_secured '("0.1", "your-permissions-id")'
+dfx canister call yieldex-ic-wallet-manager-backend withdraw_link_from_aave_secured '("0.1", "your-permissions-id")' --ic
 
 # 📊 Check your aLINK balance (AAVE interest-bearing tokens)
-dfx canister call yieldex-ic-wallet-manager-backend get_aave_link_user_balance '(null)'
+dfx canister call yieldex-ic-wallet-manager-backend get_aave_link_user_balance '(null)' --ic
 ```
 
 **Real Example Output:**
@@ -237,23 +237,33 @@ dfx canister call yieldex-ic-wallet-manager-backend get_aave_link_user_balance '
 ```bash
 # 🏗️ Create sophisticated permission structure
 dfx canister call yieldex-ic-wallet-manager-backend create_permissions '(record {
-  whitelisted_protocols = vec { 
+  whitelisted_protocols = vec {
     record { name = "AAVE"; address = "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951" }
   };
-  whitelisted_tokens = vec { 
+  whitelisted_tokens = vec {
     record { name = "LINK"; address = "0xf8fb3713d459d7c1018bd0a49d19b4c44290ebe5" }
   };
-  transfer_limits = vec { 
-    record { 
-      token_address = "0xf8fb3713d459d7c1018bd0a49d19b4c44290ebe5"; 
-      daily_limit = 1000000000000000000; 
-      max_tx_amount = 100000000000000000 
-    } 
+  transfer_limits = vec {
+    record {
+      token_address = "0xf8fb3713d459d7c1018bd0a49d19b4c44290ebe5";
+      daily_limit = 1000000000000000000;
+      max_tx_amount = 100000000000000000
+    }
   };
-})'
+  protocol_permissions = opt vec {
+    record {
+      protocol_address = "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951";
+      allowed_functions = vec { "supply"; "withdraw" };
+      max_amount_per_tx = opt 100000000000000000;
+      daily_limit = opt 1000000000000000000;
+      total_used_today = 0;
+      last_reset_date = 0;
+    }
+  };
+})' --ic
 
 # 📋 View your permission configuration
-dfx canister call yieldex-ic-wallet-manager-backend get_all_permissions
+dfx canister call yieldex-ic-wallet-manager-backend get_all_permissions --ic
 ```
 
 </details>
@@ -265,13 +275,13 @@ dfx canister call yieldex-ic-wallet-manager-backend get_all_permissions
 
 ```bash
 # 🚀 Send ETH with human-readable amounts
-dfx canister call yieldex-ic-wallet-manager-backend send_eth_human_readable '("0x742d35Cc6639C0532fEb5aEE70c28C83e4C5d50b", "0.001")'
+dfx canister call yieldex-ic-wallet-manager-backend send_eth_human_readable '("0x742d35Cc6639C0532fEb5aEE70c28C83e4C5d50b", "0.001")' --ic
 
 # 🔗 Transfer LINK tokens
-dfx canister call yieldex-ic-wallet-manager-backend transfer_link_human_readable '("0x742d35Cc6639C0532fEb5aEE70c28C83e4C5d50b", "1.5")'
+dfx canister call yieldex-ic-wallet-manager-backend transfer_link_human_readable '("0x742d35Cc6639C0532fEb5aEE70c28C83e4C5d50b", "1.5")' --ic
 
 # 🏦 Send USDC stablecoins
-dfx canister call yieldex-ic-wallet-manager-backend approve_usdc_human_readable '("0x742d35Cc6639C0532fEb5aEE70c28C83e4C5d50b", "100.50")'
+dfx canister call yieldex-ic-wallet-manager-backend approve_usdc_human_readable '("0x742d35Cc6639C0532fEb5aEE70c28C83e4C5d50b", "100.50")' --ic
 ```
 
 </details>
@@ -393,14 +403,10 @@ cd tests && RUST_BACKTRACE=1 cargo test -- --nocapture
 
 ---
 
-## 🤝 **Community**
-
-<div align="center">
-
 ### 🌟 **Join the DeFi Revolution**
 
-[![https://x.com/YieldexAi](https://img.shields.io/badge/Twitter-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white)](https://twitter.com/yieldexprotocol)
-[![@apy_info_bot](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/yieldexprotocol)
+[![https://x.com/YieldexAi](https://img.shields.io/badge/Twitter-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white)](https://x.com/YieldexAi)
+[![@apy_info_bot](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/apy_info_bot)
 [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/YieldexAI)
 
 **🚀 [Get Started Now](https://lla3p-uyaaa-aaaap-an2ea-cai.icp0.io) • 📖 [Read the Docs](https://yieldex.gitbook.io/yieldex-docs) • **
