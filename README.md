@@ -470,6 +470,14 @@ cd tests && RUST_BACKTRACE=1 cargo test -- --nocapture
 | AAVE Integration | 🟡 Internal Review | Yieldex Team | ✅ Complete                                                                                |
 | Threshold ECDSA  | 🟢 IC Verified     | DFINITY      | [View Report](https://internetcomputer.org/docs/current/developer-docs/integrations/t-ecdsa/) |
 
+### ⚠️ **Known Issues**
+
+| Issue                          | Status         | Network  | Description                                       |
+| ------------------------------ | -------------- | -------- | ------------------------------------------------- |
+| **IC Consensus Timeout**      | 🔧 In Progress | Arbitrum | `HttpOutcallError: No consensus could be reached` |
+
+**Current Focus:** Resolving Arbitrum transaction consensus issues where IC replicas return different responses during HTTP outcalls. This affects write operations (supply/withdraw) while read operations work normally. Investigation underway for RPC endpoint optimization and transaction reliability improvements.
+
 ---
 
 ## 💡 **Advanced Use Cases**
