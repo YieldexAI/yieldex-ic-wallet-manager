@@ -10,3 +10,6 @@ pub mod wrap_eth;
 pub mod uniswap;
 pub mod permissions;
 pub mod aave;
+pub mod rpc_service;
+pub mod compound;
+pub mod rebalance;
