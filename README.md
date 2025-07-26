@@ -51,10 +51,10 @@ Yieldex IC Wallet Manager is a **groundbreaking Rust-based Internet Computer can
 
 ### 🏛️ **DeFi Protocol Integration**
 
-- 🏪 **AAVE V3** - Supply, withdraw, and earn yield on Sepolia testnet
+- 🏪 **AAVE V3** - Supply, withdraw, and earn yield on Sepolia testnet ✅ **LIVE**
+- 🏗️ **Compound III** - Supply and withdraw USDC on Arbitrum One mainnet ✅ **LIVE**
+- 🔄 **Cross-Protocol Rebalancing** - Automated token migration between AAVE and Compound ✅ **LIVE**
 - 🦄 **Uniswap V3** - Automated market making and token swaps *(coming soon)*
-- 🏗️ **Compound** - Lending and borrowing operations *(planned)*
-- 🔄 **Cross-Protocol Yield Optimization** - AI-driven strategy execution
 
 ### 🔐 **Enterprise-Grade Security**
 
@@ -229,14 +229,72 @@ dfx canister call yieldex-ic-wallet-manager-backend get_aave_link_user_balance '
 
 </details>
 
+### 🏗️ **Compound III Integration**
+
+<details>
+<summary>🏦 <strong>Supply & Earn on Compound (Arbitrum)</strong></summary>
+
+```bash
+# 💰 Supply USDC to Compound III and start earning yield
+dfx canister call yieldex-ic-wallet-manager-backend supply_usdc_to_compound_secured '("1.0", "your-permissions-id")' --ic
+
+# 💸 Withdraw your USDC + earned yield
+dfx canister call yieldex-ic-wallet-manager-backend withdraw_usdc_from_compound_secured '("1.0", "your-permissions-id")' --ic
+
+# 📊 Check your Compound USDC balance
+dfx canister call yieldex-ic-wallet-manager-backend get_compound_usdc_user_balance '(null, 42161)' --ic
+
+# 🌐 Check supported chains
+dfx canister call yieldex-ic-wallet-manager-backend get_supported_chains --ic
+```
+
+**Real Example Output:**
+
+```bash
+🎉 Success! ✅ Successfully supplied 1.0 USDC to Compound! Transaction: 0xabc123...
+💰 Now earning yield on Arbitrum One mainnet with native USDC!
+```
+
+</details>
+
+### 🔄 **Cross-Protocol Rebalancing**
+
+<details>
+<summary>⚡ <strong>Automated Token Migration Between Protocols</strong></summary>
+
+```bash
+# 🔄 Rebalance from AAVE (LINK) to Compound (USDC)
+dfx canister call yieldex-ic-wallet-manager-backend rebalance_tokens_secured '("0.1", "AAVE", "COMPOUND", "LINK", "your-permissions-id")' --ic
+
+# 📊 Check supported rebalance routes for a chain
+dfx canister call yieldex-ic-wallet-manager-backend get_supported_rebalance_routes_query '(11155111)' --ic
+
+# ✅ Check if a specific route is supported
+dfx canister call yieldex-ic-wallet-manager-backend check_rebalance_route_status '("AAVE", "COMPOUND", "LINK", 11155111)' --ic
+
+# 🔍 Get protocol-token support for a chain
+dfx canister call yieldex-ic-wallet-manager-backend get_protocol_token_support_query '(42161)' --ic
+```
+
+**Real Example Output:**
+
+```bash
+✅ Successfully rebalanced 0.1 LINK from AAVE to COMPOUND! 
+Withdraw: Transaction 0xdef456... | Supply: Transaction 0xghi789...
+🚀 Optimized yield strategy executed!
+```
+
+</details>
+
 ### 🔐 **Advanced Permission System**
 
 <details>
 <summary>🛡️ <strong>Create Secure DeFi Permissions</strong></summary>
 
 ```bash
-# 🏗️ Create sophisticated permission structure
+# 🏗️ Create sophisticated permission structure for AAVE (Sepolia)
 dfx canister call yieldex-ic-wallet-manager-backend create_permissions '(record {
+  chain_id = 11155111;
   whitelisted_protocols = vec {
     record { name = "AAVE"; address = "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951" }
   };
@@ -256,6 +314,34 @@ dfx canister call yieldex-ic-wallet-manager-backend create_permissions '(record 
       allowed_functions = vec { "supply"; "withdraw" };
       max_amount_per_tx = opt 100000000000000000;
       daily_limit = opt 1000000000000000000;
+      total_used_today = 0;
+      last_reset_date = 0;
+    }
+  };
+})' --ic
+
+# 🏗️ Create permission structure for Compound (Arbitrum)
+dfx canister call yieldex-ic-wallet-manager-backend create_permissions '(record {
+  chain_id = 42161;
+  whitelisted_protocols = vec {
+    record { name = "Compound"; address = "0x9c4ec768c28520b50860ea7a15bd7213a9ff58bf" }
+  };
+  whitelisted_tokens = vec {
+    record { name = "USDC"; address = "0xaf88d065e77c8cc2239327c5edb3a432268e5831" }
+  };
+  transfer_limits = vec {
+    record {
+      token_address = "0xaf88d065e77c8cc2239327c5edb3a432268e5831";
+      daily_limit = 1000000000;
+      max_tx_amount = 1000000
+    }
+  };
+  protocol_permissions = opt vec {
+    record {
+      protocol_address = "0x9c4ec768c28520b50860ea7a15bd7213a9ff58bf";
+      allowed_functions = vec { "supply"; "withdraw" };
+      max_amount_per_tx = opt 1000000;
+      daily_limit = opt 1000000000;
       total_used_today = 0;
       last_reset_date = 0;
     }
@@ -320,41 +406,46 @@ cd tests && RUST_BACKTRACE=1 cargo test -- --nocapture
 | Network                    | Status     | Protocols               | Assets                |
 | -------------------------- | ---------- | ----------------------- | --------------------- |
 | **Ethereum Sepolia** | 🟢 Live    | AAVE V3                 | ETH, USDC, LINK, WETH |
+| **Arbitrum One**     | 🟢 Live    | Compound III            | ETH, Native USDC      |
 | **IC Mainnet**       | 🟢 Live    | Native                  | Cycles, ICP           |
 | **Ethereum Mainnet** | 🟡 Coming  | AAVE, Uniswap, Compound | All ERC-20            |
 | **Polygon**          | 🔵 Planned | AAVE, QuickSwap         | All ERC-20            |
 
 ### 💎 **Asset Registry**
 
-| Token          | Contract Address (Sepolia)                     | Decimals | DeFi Protocols |
-| -------------- | ---------------------------------------------- | -------- | -------------- |
-| **LINK** | `0xf8fb3713d459d7c1018bd0a49d19b4c44290ebe5` | 18       | AAVE V3 ✅     |
-| **USDC** | `0x1c7d4b196cb0c7b01d743fbc6116a902379c7238` | 6        | AAVE V3 🔄     |
-| **WETH** | `0x7b79995e5f793a07bc00c21412e50ecae098e7f9` | 18       | Uniswap V3 🔄  |
+| Token          | Network                | Contract Address                               | Decimals | DeFi Protocols |
+| -------------- | ---------------------- | ---------------------------------------------- | -------- | -------------- |
+| **LINK** | Ethereum Sepolia       | `0xf8fb3713d459d7c1018bd0a49d19b4c44290ebe5` | 18       | AAVE V3 ✅     |
+| **USDC** | Ethereum Sepolia       | `0x1c7d4b196cb0c7b01d743fbc6116a902379c7238` | 6        | AAVE V3 🔄     |
+| **USDC** | Arbitrum One           | `0xaf88d065e77c8cc2239327c5edb3a432268e5831` | 6        | Compound III ✅|
+| **WETH** | Ethereum Sepolia       | `0x7b79995e5f793a07bc00c21412e50ecae098e7f9` | 18       | Uniswap V3 🔄  |
 
 ---
 
 ## 🎯 **Roadmap to DeFi Dominance**
 
-### 🚀 **Phase 1: Foundation** *(Current)*
+### 🚀 **Phase 1: Foundation** *(Completed)*
 
 - [X] ✅ IC Threshold ECDSA Integration
 - [X] ✅ Multi-token Wallet Operations
 - [X] ✅ AAVE V3 Supply/Withdraw
-- [X] ✅ Advanced Permission System
+- [X] ✅ Compound III Integration (Arbitrum)
+- [X] ✅ Multi-Chain Architecture (Sepolia + Arbitrum)
+- [X] ✅ Cross-Protocol Rebalancing Engine
+- [X] ✅ Chain-Specific Permission System
 - [X] ✅ Comprehensive Testing Suite
 
 ### 🌟 **Phase 2: Expansion** *(Q2 2025)*
 
 - [ ] 🦄 Uniswap V3 Integration
-- [ ] 🏗️ Compound Protocol Support
 - [ ] 🤖 AI-Powered Yield Optimization
 - [ ] 📊 Advanced Analytics Dashboard
 - [ ] 🌐 Ethereum Mainnet Deployment
+- [ ] 🔧 Advanced Rebalancing Strategies
 
 ### 🚀 **Phase 3: Revolution** *(Q3 2025)*
 
-- [ ] 🌈 Multi-Chain Support (Polygon, Arbitrum)
+- [ ] 🌈 Extended Multi-Chain Support (Polygon, Base)
 - [ ] 🤖 Autonomous Yield Strategies
 - [ ] 📱 Mobile SDK
 - [ ] 🏛️ Institutional Features
