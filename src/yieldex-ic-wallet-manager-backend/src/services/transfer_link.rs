@@ -9,7 +9,8 @@ use alloy::{
     transports::icp::IcpConfig,
 };
 
-use crate::{create_icp_signer, get_rpc_service_sepolia};
+use crate::create_icp_signer;
+use crate::services::rpc_service::{get_rpc_service_by_chain_id, SEPOLIA_CHAIN_ID};
 
 thread_local! {
     static NONCE: RefCell<Option<u64>> = const { RefCell::new(None) };
@@ -50,7 +51,7 @@ pub async fn transfer_link(to_address: String, amount: String) -> Result<String,
 
     // Setup provider
     let wallet = EthereumWallet::from(signer);
-    let rpc_service = get_rpc_service_sepolia();
+    let rpc_service = get_rpc_service_by_chain_id(SEPOLIA_CHAIN_ID)?;
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new()
         .with_gas_estimation()

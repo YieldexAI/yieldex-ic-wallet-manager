@@ -6,7 +6,8 @@ use alloy::{
     transports::icp::IcpConfig,
 };
 
-use crate::{create_icp_signer, get_rpc_service_sepolia};
+use crate::create_icp_signer;
+use crate::services::rpc_service::{get_rpc_service_by_chain_id, SEPOLIA_CHAIN_ID};
 
 // Codegen from ABI file to interact with the contract.
 sol!(
@@ -27,7 +28,7 @@ pub async fn get_balance_link(address: Option<String>) -> Result<String, String>
         }
     };
     let address = address.parse::<Address>().map_err(|e| e.to_string())?;
-    let rpc_service = get_rpc_service_sepolia();
+    let rpc_service = get_rpc_service_by_chain_id(SEPOLIA_CHAIN_ID)?;
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new().on_icp(config);
 

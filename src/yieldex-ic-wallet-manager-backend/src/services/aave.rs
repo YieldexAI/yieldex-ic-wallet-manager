@@ -9,7 +9,8 @@ use alloy::{
     transports::icp::IcpConfig,
 };
 use candid::Principal;
-use crate::{PRINCIPAL_TO_ADDRESS_MAP, StorablePrincipal, get_rpc_service_sepolia};
+use crate::{PRINCIPAL_TO_ADDRESS_MAP, StorablePrincipal};
+use crate::services::rpc_service::{get_rpc_service_by_chain_id, SEPOLIA_CHAIN_ID};
 use crate::services::permissions::{is_permissions_owner, verify_protocol_permission, set_daily_usage};
 use crate::services::get_balance_link::get_balance_link;
 
@@ -83,7 +84,7 @@ pub async fn supply_link_to_aave_with_permissions(
     // 4. Setup provider
     ic_cdk::println!("✅ Step 4: Setting up provider and wallet...");
     let wallet = EthereumWallet::from(signer);
-    let rpc_service = get_rpc_service_sepolia();
+    let rpc_service = get_rpc_service_by_chain_id(SEPOLIA_CHAIN_ID)?;
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new()
         .with_gas_estimation()
@@ -257,7 +258,7 @@ pub async fn withdraw_link_from_aave_with_permissions(
     // 4. Setup provider
     ic_cdk::println!("✅ Step 4: Setting up provider and wallet...");
     let wallet = EthereumWallet::from(signer);
-    let rpc_service = get_rpc_service_sepolia();
+    let rpc_service = get_rpc_service_by_chain_id(SEPOLIA_CHAIN_ID)?;
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new()
         .with_gas_estimation()
@@ -467,7 +468,7 @@ async fn get_link_balance_for_address(address: String) -> Result<String, String>
 /// Get aLINK balance for address
 async fn get_alink_balance_for_address(address: String) -> Result<String, String> {
     // Create provider without signer for read-only operations
-    let rpc_service = get_rpc_service_sepolia();
+    let rpc_service = get_rpc_service_by_chain_id(SEPOLIA_CHAIN_ID)?;
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new().on_icp(config);
     
