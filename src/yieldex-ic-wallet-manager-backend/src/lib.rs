@@ -10,7 +10,6 @@ use std::cell::RefCell;
 use alloy::signers::icp::IcpSigner;
 use alloy::signers::Signer; // The Signer trait
 use alloy::primitives::Address;
-use alloy::transports::icp::{RpcApi, RpcService};
 
 // Services module
 mod services;
@@ -25,7 +24,10 @@ use services::{
     sign_message::{sign_message, sign_message_with_address, sign_hash},
     wrap_eth::{wrap_eth, wrap_eth_human, unwrap_weth, unwrap_weth_human},
     permissions::{is_permissions_owner, verify_protocol_permission, add_protocol_permission, set_daily_usage},
-    aave::{supply_link_to_aave_with_permissions, withdraw_link_from_aave_with_permissions, get_aave_link_balance} // 🆕 AAVE Service Methods (Sprint 2)
+    aave::{supply_link_to_aave_with_permissions, withdraw_link_from_aave_with_permissions, get_aave_link_balance}, // 🆕 AAVE Service Methods (Sprint 2)
+    compound::{supply_usdc_to_compound_with_permissions, withdraw_usdc_from_compound_with_permissions, get_compound_usdc_balance}, // 🆕 Compound Service Methods
+    rebalance::{rebalance_tokens, get_supported_rebalance_routes, get_rebalance_route_status}, // 🆕 Rebalance Service Methods
+    rpc_service::{is_supported_chain, get_supported_chains_info} // 🆕 RPC Service imports
 };
 
 // --- Types ---
@@ -69,6 +71,7 @@ pub struct Token {
 pub struct Permissions {
     id: PermissionsId,
     owner: Principal,
+    chain_id: u64,                                  // 🆕 Chain ID for multi-chain support
     whitelisted_protocols: Vec<Protocol>,
     whitelisted_tokens: Vec<Token>,
     transfer_limits: Vec<TransferLimit>,
@@ -79,6 +82,7 @@ pub struct Permissions {
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct CreatePermissionsRequest {
+    chain_id: u64,                                         // 🆕 Required chain ID
     whitelisted_protocols: Vec<Protocol>,
     whitelisted_tokens: Vec<Token>,
     transfer_limits: Vec<TransferLimit>,
@@ -88,6 +92,7 @@ pub struct CreatePermissionsRequest {
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct UpdatePermissionsRequest {
     permissions_id: PermissionsId,
+    chain_id: Option<u64>,                                 // 🆕 Optional chain ID update
     whitelisted_protocols: Option<Vec<Protocol>>,
     whitelisted_tokens: Option<Vec<Token>>,
     transfer_limits: Option<Vec<TransferLimit>>,
@@ -313,8 +318,19 @@ async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions
     let timestamp = now();
     ic_cdk::println!("✅ Step 3 Complete: Timestamp set to: {}", timestamp);
     
+    // Validate chain_id
+    ic_cdk::println!("✅ Step 4: Validating chain_id...");
+    if !is_supported_chain(req.chain_id) {
+        let error_msg = format!("Unsupported chain_id: {}. Supported chains: {:?}", 
+                               req.chain_id, get_supported_chains_info());
+        ic_cdk::println!("❌ Step 4 Failed: {}", error_msg);
+        return Err(error_msg);
+    }
+    ic_cdk::println!("✅ Step 4 Complete: Chain ID {} is supported", req.chain_id);
+    
     // Log request details
     ic_cdk::println!("📋 Permission Request Details:");
+    ic_cdk::println!("  - Chain ID: {}", req.chain_id);
     ic_cdk::println!("  - Whitelisted Protocols: {} protocols", req.whitelisted_protocols.len());
     for (i, protocol) in req.whitelisted_protocols.iter().enumerate() {
         ic_cdk::println!("    {}. {} ({})", i + 1, protocol.name, protocol.address);
@@ -344,10 +360,11 @@ async fn create_permissions(req: CreatePermissionsRequest) -> Result<Permissions
     }
     
     // Create permissions struct
-    ic_cdk::println!("✅ Step 4: Creating permissions structure...");
+    ic_cdk::println!("✅ Step 5: Creating permissions structure...");
     let permissions = Permissions {
         id: permissions_id.clone(),
         owner: caller,
+        chain_id: req.chain_id,
         whitelisted_protocols: req.whitelisted_protocols,
         whitelisted_tokens: req.whitelisted_tokens,
         transfer_limits: req.transfer_limits,
@@ -494,6 +511,7 @@ fn update_permissions(req: UpdatePermissionsRequest) -> Result<Permissions, Stri
     
     // Log current state
     ic_cdk::println!("📋 Current State:");
+    ic_cdk::println!("  - Chain ID: {}", permissions.chain_id);
     ic_cdk::println!("  - Protocols: {}", permissions.whitelisted_protocols.len());
     ic_cdk::println!("  - Tokens: {}", permissions.whitelisted_tokens.len());
     ic_cdk::println!("  - Transfer Limits: {}", permissions.transfer_limits.len());
@@ -503,6 +521,18 @@ fn update_permissions(req: UpdatePermissionsRequest) -> Result<Permissions, Stri
     // Update fields if provided
     ic_cdk::println!("✅ Step 3: Applying updates...");
     let mut changes_made = 0;
+    
+    if let Some(chain_id) = req.chain_id {
+        ic_cdk::println!("🔄 Updating chain_id: {} -> {}", permissions.chain_id, chain_id);
+        if !is_supported_chain(chain_id) {
+            let error_msg = format!("Unsupported chain_id: {}. Supported chains: {:?}", 
+                                   chain_id, get_supported_chains_info());
+            ic_cdk::println!("❌ Chain ID validation failed: {}", error_msg);
+            return Err(error_msg);
+        }
+        permissions.chain_id = chain_id;
+        changes_made += 1;
+    }
     
     if let Some(protocols) = req.whitelisted_protocols {
         ic_cdk::println!("🔄 Updating whitelisted protocols: {} -> {}", 
@@ -712,8 +742,8 @@ async fn get_eth_balance(address: Option<String>) -> Result<String, String> {
 
 /// Get USDC balance for an address (or current user's address if none provided)
 #[update]
-async fn get_usdc_balance(address: Option<String>) -> Result<String, String> {
-    get_balance_usdc(address).await
+async fn get_usdc_balance(address: Option<String>, chain_id: u64) -> Result<String, String> {
+    get_balance_usdc(address, chain_id).await
 }
 
 /// Get LINK balance for an address (or current user's address if none provided)
@@ -897,6 +927,72 @@ async fn get_aave_link_user_balance(address: Option<String>) -> Result<String, S
     get_aave_link_balance(address).await
 }
 
+// --- Compound Service Methods ---
+
+/// Supply USDC to Compound with permission verification
+#[update]
+async fn supply_usdc_to_compound_secured(
+    amount_human: String, 
+    permissions_id: String
+) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+    supply_usdc_to_compound_with_permissions(amount_human, permissions_id, caller).await
+}
+
+/// Withdraw USDC from Compound with permission verification
+#[update]
+async fn withdraw_usdc_from_compound_secured(
+    amount_human: String, 
+    permissions_id: String
+) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+    withdraw_usdc_from_compound_with_permissions(amount_human, permissions_id, caller).await
+}
+
+/// Get user's USDC balance in Compound
+#[update]
+async fn get_compound_usdc_user_balance(address: Option<String>, chain_id: u64) -> Result<String, String> {
+    get_compound_usdc_balance(address, chain_id).await
+}
+
+// --- Rebalance Service Methods ---
+
+/// Rebalance tokens between DeFi protocols
+#[update]
+async fn rebalance_tokens_secured(
+    amount: String,
+    source_protocol: String,
+    target_protocol: String,
+    token: String,
+    permissions_id: String
+) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+    rebalance_tokens(amount, source_protocol, target_protocol, token, permissions_id, caller).await
+}
+
+/// Get supported rebalance routes for a specific chain
+#[query]
+fn get_supported_rebalance_routes_query(chain_id: u64) -> Vec<(String, String, String)> {
+    get_supported_rebalance_routes(chain_id)
+}
+
+/// Check rebalance route status for a specific chain
+#[query]
+fn check_rebalance_route_status(
+    source_protocol: String,
+    target_protocol: String,
+    token: String,
+    chain_id: u64
+) -> String {
+    get_rebalance_route_status(&source_protocol, &target_protocol, &token, chain_id)
+}
+
+/// Get supported protocol-token combinations for a specific chain
+#[query]
+fn get_protocol_token_support_query(chain_id: u64) -> Vec<(String, String)> {
+    services::rebalance::get_protocol_token_support(chain_id)
+}
+
 // --- Uniswap Service Methods ---
 
 // /// Get estimated quote for WETH → USDC swap
@@ -911,15 +1007,21 @@ async fn get_aave_link_user_balance(address: Option<String>) -> Result<String, S
 //     approve_weth_for_universal_router_human(amount_human).await
 // }
 
-// --- RPC Service Configuration ---
+// --- Chain Support API ---
 
-fn get_rpc_service_sepolia() -> RpcService {
-    // Using a custom RPC proxy for Sepolia testnet
-    // Note: This is a demo proxy, use your own RPC endpoint in production
-    RpcService::Custom(RpcApi {
-        url: "https://ic-alloy-evm-rpc-proxy.kristofer-977.workers.dev/eth-sepolia".to_string(),
-        headers: None,
-    })
+/// Get list of supported chains
+#[query]
+fn get_supported_chains() -> Vec<(u64, String)> {
+    get_supported_chains_info()
+        .into_iter()
+        .map(|(id, name)| (id, name.to_string()))
+        .collect()
+}
+
+/// Check if a chain is supported
+#[query]
+fn is_chain_supported(chain_id: u64) -> bool {
+    is_supported_chain(chain_id)
 }
 
 fn get_ecdsa_key_name() -> String {

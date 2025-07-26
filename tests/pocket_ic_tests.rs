@@ -33,6 +33,7 @@ struct ProtocolPermission {
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
 struct CreatePermissionsRequest {
+    pub chain_id: u64,                                         // 🆕 Required chain ID
     pub whitelisted_protocols: Vec<Protocol>,
     pub whitelisted_tokens: Vec<Token>,
     pub transfer_limits: Vec<TransferLimit>,
@@ -52,6 +53,7 @@ struct UpdatePermissionsRequest {
 struct Permissions {
     pub id: String,
     pub owner: Principal,
+    pub chain_id: u64,                                // 🆕 Chain ID field
     pub whitelisted_protocols: Vec<Protocol>,
     pub whitelisted_tokens: Vec<Token>,
     pub transfer_limits: Vec<TransferLimit>,
@@ -90,6 +92,7 @@ fn example_aave_protocol_permission() -> ProtocolPermission {
 // 🆕 Helper function to create basic permissions request without protocol permissions
 fn basic_permissions_request() -> CreatePermissionsRequest {
     CreatePermissionsRequest {
+        chain_id: 11155111, // Sepolia chain ID for AAVE
         whitelisted_protocols: vec![example_protocol()],
         whitelisted_tokens: vec![example_token()],
         transfer_limits: vec![TransferLimit {
@@ -104,6 +107,7 @@ fn basic_permissions_request() -> CreatePermissionsRequest {
 // 🆕 Helper function to create full permissions request with AAVE protocol permissions
 fn full_permissions_request_with_aave() -> CreatePermissionsRequest {
     CreatePermissionsRequest {
+        chain_id: 11155111, // Sepolia chain ID for AAVE
         whitelisted_protocols: vec![example_protocol()],
         whitelisted_tokens: vec![example_token()],
         transfer_limits: vec![TransferLimit {
@@ -793,6 +797,7 @@ mod tests {
         
         // 2. Создать базовые permissions
         let request = CreatePermissionsRequest {
+            chain_id: 11155111, // Sepolia chain ID for AAVE
             whitelisted_protocols: vec![],
             whitelisted_tokens: vec![],
             transfer_limits: vec![],
@@ -998,6 +1003,7 @@ mod tests {
         
         // 2. Create permissions with AAVE protocol
         let request = CreatePermissionsRequest {
+            chain_id: 11155111, // Sepolia chain ID for AAVE
             whitelisted_protocols: vec![Protocol {
                 name: "AAVE".to_string(),
                 address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
@@ -1106,6 +1112,7 @@ mod tests {
         
         // 2. Create permissions with AAVE protocol
         let request = CreatePermissionsRequest {
+            chain_id: 11155111, // Sepolia chain ID for AAVE
             whitelisted_protocols: vec![Protocol {
                 name: "AAVE".to_string(),
                 address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
@@ -1214,6 +1221,7 @@ mod tests {
         
         // 2. Create permissions
         let request = CreatePermissionsRequest {
+            chain_id: 11155111, // Sepolia chain ID for AAVE
             whitelisted_protocols: vec![],
             whitelisted_tokens: vec![],
             transfer_limits: vec![],
@@ -1342,6 +1350,7 @@ mod tests {
         
         // Step 2: Create permissions with AAVE protocol
         let permissions_request = CreatePermissionsRequest {
+            chain_id: 11155111, // Sepolia chain ID for AAVE
             whitelisted_protocols: vec![Protocol {
                 name: "AAVE".to_string(),
                 address: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951".to_string(),
@@ -1491,6 +1500,7 @@ mod tests {
         
         // 2. Create permissions
         let request = CreatePermissionsRequest {
+            chain_id: 11155111, // Sepolia chain ID for AAVE
             whitelisted_protocols: vec![],
             whitelisted_tokens: vec![],
             transfer_limits: vec![],
@@ -1601,6 +1611,7 @@ mod tests {
         
         // 2. Create permissions
         let request = CreatePermissionsRequest {
+            chain_id: 11155111, // Sepolia chain ID for AAVE
             whitelisted_protocols: vec![],
             whitelisted_tokens: vec![],
             transfer_limits: vec![],
@@ -1775,6 +1786,7 @@ mod tests {
         
         // 2. Create permissions
         let request = CreatePermissionsRequest {
+            chain_id: 11155111, // Sepolia chain ID for AAVE
             whitelisted_protocols: vec![],
             whitelisted_tokens: vec![],
             transfer_limits: vec![],
