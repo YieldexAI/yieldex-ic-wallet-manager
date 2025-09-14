@@ -46,3 +46,6 @@ Cargo.lock
 # Project Docs
 project_docs/
 .cursor/
+
+# Claude Code assistant files
+CLAUDE.md

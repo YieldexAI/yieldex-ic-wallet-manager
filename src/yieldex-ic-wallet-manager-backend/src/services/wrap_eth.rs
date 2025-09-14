@@ -9,7 +9,19 @@ use alloy::{
     transports::icp::IcpConfig,
 };
 
-use crate::{create_icp_signer, get_rpc_service_sepolia};
+use crate::create_icp_signer;
+use crate::services::rpc_service::{get_rpc_service_by_chain_id, SEPOLIA_CHAIN_ID, BASE_CHAIN_ID, OPTIMISM_CHAIN_ID};
+use alloy::primitives::Address;
+
+/// Get WETH contract address based on chain_id
+fn get_weth_address(chain_id: u64) -> Result<Address, String> {
+    match chain_id {
+        SEPOLIA_CHAIN_ID => Ok(address!("7b79995e5f793A07Bc00c21412e50Ecae098E7f9")), // WETH on Sepolia
+        BASE_CHAIN_ID => Ok(address!("4200000000000000000000000000000000000006")), // Native WETH on Base
+        OPTIMISM_CHAIN_ID => Ok(address!("4200000000000000000000000000000000000006")), // Native WETH on Optimism
+        _ => Err(format!("WETH not configured for chain_id: {}", chain_id))
+    }
+}
 
 thread_local! {
     static NONCE: RefCell<Option<u64>> = const { RefCell::new(None) };
@@ -50,7 +62,7 @@ pub async fn wrap_eth(amount: String) -> Result<String, String> {
 
     // Setup provider
     let wallet = EthereumWallet::from(signer);
-    let rpc_service = get_rpc_service_sepolia();
+    let rpc_service = get_rpc_service_by_chain_id(SEPOLIA_CHAIN_ID)?;
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new()
         .with_gas_estimation()
@@ -81,9 +93,9 @@ pub async fn wrap_eth(amount: String) -> Result<String, String> {
             .map_err(|e| format!("Failed to get nonce: {}", e))?
     };
 
-    // Create WETH contract instance (Sepolia WETH address)
+    // Create WETH contract instance
     let contract = WETH::new(
-        address!("7b79995e5f793A07Bc00c21412e50Ecae098E7f9"),
+        get_weth_address(SEPOLIA_CHAIN_ID)?,
         provider.clone(),
     );
 
@@ -172,7 +184,7 @@ pub async fn unwrap_weth(amount: String) -> Result<String, String> {
 
     // Setup provider
     let wallet = EthereumWallet::from(signer);
-    let rpc_service = get_rpc_service_sepolia();
+    let rpc_service = get_rpc_service_by_chain_id(SEPOLIA_CHAIN_ID)?;
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new()
         .with_gas_estimation()
@@ -193,7 +205,7 @@ pub async fn unwrap_weth(amount: String) -> Result<String, String> {
 
     // Create WETH contract instance
     let contract = WETH::new(
-        address!("7b79995e5f793A07Bc00c21412e50Ecae098E7f9"),
+        get_weth_address(SEPOLIA_CHAIN_ID)?,
         provider.clone(),
     );
 

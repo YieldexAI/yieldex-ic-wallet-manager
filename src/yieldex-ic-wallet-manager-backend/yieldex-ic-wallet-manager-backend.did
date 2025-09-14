@@ -35,6 +35,7 @@ type ProtocolPermission = record {
 type Permissions = record {
     id: PermissionsId;
     owner: principal;
+    chain_id: nat64; // 🆕 Chain ID for multi-chain support
     whitelisted_protocols: vec Protocol;
     whitelisted_tokens: vec Token;
     transfer_limits: vec TransferLimit;
@@ -44,6 +45,7 @@ type Permissions = record {
 };
 
 type CreatePermissionsRequest = record {
+    chain_id: nat64; // 🆕 Required chain ID
     whitelisted_protocols: vec Protocol;
     whitelisted_tokens: vec Token;
     transfer_limits: vec TransferLimit;
@@ -52,6 +54,7 @@ type CreatePermissionsRequest = record {
 
 type UpdatePermissionsRequest = record {
     permissions_id: PermissionsId;
+    chain_id: opt nat64; // 🆕 Optional chain ID update
     whitelisted_protocols: opt vec Protocol;
     whitelisted_tokens: opt vec Token;
     transfer_limits: opt vec TransferLimit;
@@ -86,8 +89,8 @@ service : {
     // Get balance of an ETH account
     "get_eth_balance": (address: opt text) -> (variant { Ok: text; Err: text });
 
-    // Get balance of a USDC account
-    "get_usdc_balance": (address: opt text) -> (variant { Ok: text; Err: text });
+    // Get balance of a USDC account for a specific chain
+    "get_usdc_balance": (address: opt text, chain_id: nat64) -> (variant { Ok: text; Err: text });
 
     // Get balance of a LINK account
     "get_link_balance": (address: opt text) -> (variant { Ok: text; Err: text });
@@ -164,5 +167,22 @@ service : {
     "get_aave_link_user_balance": (address: opt text) -> (variant { Ok: text; Err: text });
     "supply_link_to_aave_secured": (amount_human: text, permissions_id: text) -> (variant { Ok: text; Err: text });
     "withdraw_link_from_aave_secured": (amount_human: text, permissions_id: text) -> (variant { Ok: text; Err: text });
+    "supply_to_aave_secured": (amount_human: text, permissions_id: text, token_address: text, token_symbol: text) -> (variant { Ok: text; Err: text });
+    "withdraw_from_aave_secured": (amount_human: text, permissions_id: text, token_address: text, token_symbol: text) -> (variant { Ok: text; Err: text });
+
+    // 🆕 Compound operations
+    "supply_usdc_to_compound_secured": (amount_human: text, permissions_id: text) -> (variant { Ok: text; Err: text });
+    "withdraw_usdc_from_compound_secured": (amount_human: text, permissions_id: text) -> (variant { Ok: text; Err: text });
+    "get_compound_usdc_user_balance": (address: opt text, chain_id: nat64) -> (variant { Ok: text; Err: text });
+
+    // 🆕 Rebalance operations
+    "rebalance_tokens_secured": (amount: text, source_protocol: text, target_protocol: text, token: text, permissions_id: text) -> (variant { Ok: text; Err: text });
+    "get_supported_rebalance_routes_query": (chain_id: nat64) -> (vec record { text; text; text }) query;
+    "check_rebalance_route_status": (source_protocol: text, target_protocol: text, token: text, chain_id: nat64) -> (text) query;
+    "get_protocol_token_support_query": (chain_id: nat64) -> (vec record { text; text }) query;
+
+    // 🆕 Chain support operations
+    "get_supported_chains": () -> (vec record { nat64; text }) query;
+    "is_chain_supported": (chain_id: nat64) -> (bool) query;
 
 }

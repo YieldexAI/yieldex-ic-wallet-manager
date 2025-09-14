@@ -9,7 +9,8 @@ use alloy::{
     transports::icp::IcpConfig,
 };
 
-use crate::{create_icp_signer, get_rpc_service_sepolia};
+use crate::create_icp_signer;
+use crate::services::rpc_service::{get_rpc_service_by_chain_id, SEPOLIA_CHAIN_ID};
 
 thread_local! {
     static NONCE: RefCell<Option<u64>> = const { RefCell::new(None) };
@@ -98,7 +99,7 @@ pub async fn approve_weth(spender_address: String, amount: String) -> Result<Str
 
     // Setup provider
     let wallet = EthereumWallet::from(signer);
-    let rpc_service = get_rpc_service_sepolia();
+    let rpc_service = get_rpc_service_by_chain_id(SEPOLIA_CHAIN_ID)?;
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new()
         .with_gas_estimation()
@@ -214,7 +215,7 @@ pub async fn get_weth_allowance(owner_address: Option<String>, spender_address: 
     };
 
     // Setup provider (read-only, no wallet needed)
-    let rpc_service = get_rpc_service_sepolia();
+    let rpc_service = get_rpc_service_by_chain_id(SEPOLIA_CHAIN_ID)?;
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new().on_icp(config);
 
@@ -250,7 +251,7 @@ pub async fn get_weth_balance(address: Option<String>) -> Result<String, String>
         }
     };
 
-    let rpc_service = get_rpc_service_sepolia();
+    let rpc_service = get_rpc_service_by_chain_id(SEPOLIA_CHAIN_ID)?;
     let config = IcpConfig::new(rpc_service);
     let provider = ProviderBuilder::new().on_icp(config);
 

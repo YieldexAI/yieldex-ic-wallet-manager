@@ -28,9 +28,13 @@ pub fn check_daily_limits(
     amount: u64
 ) -> Result<bool, String> {
     let now = ic_cdk::api::time() / 1_000_000;
-    
+
+    // Normalize protocol address for comparison
+    let normalized_protocol_address = protocol_address.trim_start_matches("0x").to_lowercase();
+
     for perm in &permissions.protocol_permissions {
-        if perm.protocol_address == protocol_address {
+        let normalized_perm_address = perm.protocol_address.trim_start_matches("0x").to_lowercase();
+        if normalized_perm_address == normalized_protocol_address {
             // Check daily limit reset
             if let Some(daily_limit) = perm.daily_limit {
                 let today_start = now - (now % 86400); // Start of day
@@ -62,8 +66,8 @@ pub fn check_daily_limits(
 
 /// Check permission to perform protocol operation
 pub fn verify_protocol_permission(
-    permissions_id: String, 
-    protocol_address: String, 
+    permissions_id: String,
+    protocol_address: String,
     function_name: String,
     amount: u64,
     caller: Principal
@@ -72,7 +76,7 @@ pub fn verify_protocol_permission(
     if let Err(e) = is_permissions_owner(&permissions_id, caller) {
         return Err(e);
     }
-    
+
     // Get permissions
     let permissions = PERMISSIONS_MAP.with(|map| {
         map.borrow()
@@ -80,21 +84,25 @@ pub fn verify_protocol_permission(
             .map(|p| p.0.clone())
             .ok_or_else(|| "Permissions not found".to_string())
     })?;
-    
+
+    // Normalize protocol address for comparison (remove 0x and convert to lowercase)
+    let normalized_protocol_address = protocol_address.trim_start_matches("0x").to_lowercase();
+
     // Search for protocol permission
     for perm in &permissions.protocol_permissions {
-        if perm.protocol_address == protocol_address {
+        let normalized_perm_address = perm.protocol_address.trim_start_matches("0x").to_lowercase();
+        if normalized_perm_address == normalized_protocol_address {
             // Check allowed functions
             if !perm.allowed_functions.contains(&function_name) {
                 return Err(format!("Function '{}' not allowed for protocol {}", function_name, protocol_address));
             }
             
-            // Check
-            return check_daily_limits(&permissions, &protocol_address, amount);
+            // Check daily limits (using normalized address for consistency)
+            return check_daily_limits(&permissions, &normalized_perm_address, amount);
         }
     }
-    
-    Err(format!("Protocol {} not found in permissions", protocol_address))
+
+    Err(format!("Protocol {} not found in permissions", normalized_protocol_address))
 }
 
 /// Add permission for protocol
@@ -160,10 +168,14 @@ pub fn set_daily_usage(
     
     let now = ic_cdk::api::time() / 1_000_000;
     let today_start = now - (now % 86400); // Start of day
-    
+
+    // Normalize protocol address for comparison
+    let normalized_protocol_address = protocol_address.trim_start_matches("0x").to_lowercase();
+
     // Search and update protocol permission
     for perm in &mut permissions.protocol_permissions {
-        if perm.protocol_address == protocol_address {
+        let normalized_perm_address = perm.protocol_address.trim_start_matches("0x").to_lowercase();
+        if normalized_perm_address == normalized_protocol_address {
             // Reset counter if new day started
             if perm.last_reset_date < today_start {
                 perm.total_used_today = 0;
