@@ -12,11 +12,17 @@ import { chains } from '@/wagmi';
 interface RealWalletConnectProps {
   onConnected?: (address: string, chainId: number) => void;
   onDisconnected?: () => void;
+  onConnectionSuccess?: () => void; // Called after successful connection
+  showModal?: boolean; // External control of modal
+  onModalClose?: () => void; // External modal close handler
 }
 
-const RealWalletConnect: React.FC<RealWalletConnectProps> = ({ 
-  onConnected, 
-  onDisconnected 
+const RealWalletConnect: React.FC<RealWalletConnectProps> = ({
+  onConnected,
+  onDisconnected,
+  onConnectionSuccess,
+  showModal: externalShowModal,
+  onModalClose: externalOnModalClose
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -33,6 +39,7 @@ const RealWalletConnect: React.FC<RealWalletConnectProps> = ({
   useEffect(() => {
     if (isConnected && address && chain) {
       onConnected?.(address, chain.id);
+      onConnectionSuccess?.(); // Call success callback
     } else if (!isConnected) {
       onDisconnected?.();
     }
@@ -50,7 +57,13 @@ const RealWalletConnect: React.FC<RealWalletConnectProps> = ({
       console.log('Calling connect...');
       const result = await connect({ connector });
       console.log('Connection successful:', result);
-      setShowModal(false);
+
+      // Close modal (either internal or external)
+      if (externalOnModalClose) {
+        externalOnModalClose();
+      } else {
+        setShowModal(false);
+      }
     } catch (error) {
       console.error('Connection failed:', error);
     }
@@ -201,8 +214,8 @@ const RealWalletConnect: React.FC<RealWalletConnectProps> = ({
 
       {/* Connection Modal */}
       <Modal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        isOpen={externalShowModal !== undefined ? externalShowModal : showModal}
+        onClose={externalOnModalClose || (() => setShowModal(false))}
         title="Connect Wallet"
         size="md"
       >
@@ -282,7 +295,7 @@ const RealWalletConnect: React.FC<RealWalletConnectProps> = ({
           <div className="flex space-x-3 pt-4">
             <Button
               variant="ghost"
-              onClick={() => setShowModal(false)}
+              onClick={externalOnModalClose || (() => setShowModal(false))}
               fullWidth
             >
               Cancel

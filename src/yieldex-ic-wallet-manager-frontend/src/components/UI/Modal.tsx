@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { modalVariants, backdropVariants } from '@/utils/animations';
 import { clsx } from 'clsx';
@@ -64,7 +65,11 @@ const Modal: React.FC<ModalProps> = ({
     }
   };
 
-  return (
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -116,7 +121,8 @@ const Modal: React.FC<ModalProps> = ({
           </div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
 
