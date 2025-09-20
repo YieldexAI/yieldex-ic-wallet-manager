@@ -167,6 +167,7 @@ export const Grid: React.FC<{
       'grid',
       colsClasses[cols],
       gapClasses[gap],
+      'items-stretch',
       className
     )}>
       {children}

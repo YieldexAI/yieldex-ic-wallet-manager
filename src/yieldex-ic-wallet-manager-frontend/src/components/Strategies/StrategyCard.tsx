@@ -53,8 +53,7 @@ const StrategyCard: React.FC<StrategyCardProps> = ({
   const getStrategyProtocols = () => {
     return strategy.protocols.map(protocolId => {
       const protocol = PROTOCOLS.find(p => p.id === protocolId);
-      const allocation = strategy.allocation[protocolId] || 0;
-      return { protocol, allocation };
+      return { protocol };
     }).filter(item => item.protocol);
   };
 
@@ -64,7 +63,7 @@ const StrategyCard: React.FC<StrategyCardProps> = ({
       initial="initial"
       animate="animate"
       whileHover="hover"
-      className={className}
+      className={clsx('h-full', className)}
     >
       <Card
         variant="glass"
@@ -76,7 +75,7 @@ const StrategyCard: React.FC<StrategyCardProps> = ({
         onClick={() => onSelect(strategy)}
       >
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-6">
             <CardTitle size="lg" className="flex items-center space-x-2">
               <div className={clsx('p-2 rounded-lg', getRiskColor(strategy.risk))}>
                 {getRiskIcon(strategy.risk)}
@@ -113,10 +112,10 @@ const StrategyCard: React.FC<StrategyCardProps> = ({
               </span>
             </div>
 
-            {/* Protocol Allocation */}
+            {/* Protocols */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-300">Protocol Allocation</span>
+                <span className="text-sm font-medium text-gray-300">Protocols</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -130,14 +129,12 @@ const StrategyCard: React.FC<StrategyCardProps> = ({
 
               {/* Protocol Pills */}
               <div className="flex flex-wrap gap-2">
-                {getStrategyProtocols().slice(0, showDetails ? undefined : 3).map(({ protocol, allocation }) => (
+                {getStrategyProtocols().slice(0, showDetails ? undefined : 3).map(({ protocol }) => (
                   <div
                     key={protocol!.id}
-                    className="flex items-center space-x-1 px-2 py-1 bg-gray-700/50 rounded-full text-xs"
+                    className="px-2 py-1 bg-gray-700/50 rounded-full text-xs"
                   >
                     <span className="text-gray-300">{protocol!.name}</span>
-                    <span className="text-gray-500">•</span>
-                    <span className="text-primary-400 font-medium">{allocation}%</span>
                   </div>
                 ))}
                 {!showDetails && getStrategyProtocols().length > 3 && (

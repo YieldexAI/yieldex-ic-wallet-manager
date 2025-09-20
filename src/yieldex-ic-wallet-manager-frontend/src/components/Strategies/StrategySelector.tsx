@@ -32,6 +32,14 @@ const StrategySelector: React.FC = () => {
     selectStrategy(strategy.id);
   };
 
+  // Clear selected strategy when switching to custom tab
+  const handleTabChange = (tab: TabFilter) => {
+    if (tab === 'custom' && activeTab === 'curated') {
+      selectStrategy('');
+    }
+    setActiveTab(tab);
+  };
+
   const handleStartEarning = () => {
     if (!selectedStrategy) return;
 
@@ -78,7 +86,7 @@ const StrategySelector: React.FC = () => {
             return (
               <motion.div key={tab.id} variants={listItemVariants} custom={index}>
                 <button
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleTabChange(tab.id)}
                   className={clsx(
                     'flex items-center space-x-2 px-4 py-3 text-sm font-medium transition-all duration-200 border-b-2',
                     isActive
@@ -182,61 +190,6 @@ const StrategySelector: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Strategy Comparison */}
-      <Section title="Strategy Comparison">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-700">
-                <th className="text-left py-3 text-sm font-medium text-gray-300">Strategy</th>
-                <th className="text-center py-3 text-sm font-medium text-gray-300">APY</th>
-                <th className="text-center py-3 text-sm font-medium text-gray-300">Risk</th>
-                <th className="text-center py-3 text-sm font-medium text-gray-300">Min Deposit</th>
-                <th className="text-center py-3 text-sm font-medium text-gray-300">Protocols</th>
-              </tr>
-            </thead>
-            <tbody>
-              {strategies.map((strategy, index) => (
-                <motion.tr
-                  key={strategy.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
-                >
-                  <td className="py-4">
-                    <div className="font-medium text-white">{strategy.name}</div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      {strategy.description.substring(0, 60)}...
-                    </div>
-                  </td>
-                  <td className="text-center py-4">
-                    <span className="text-primary-400 font-semibold">
-                      {strategy.expectedApy.toFixed(2)}%
-                    </span>
-                  </td>
-                  <td className="text-center py-4">
-                    <span className={clsx(
-                      'px-2 py-1 rounded-full text-xs font-medium',
-                      strategy.risk === 'conservative' && 'bg-green-500/20 text-green-400',
-                      strategy.risk === 'moderate' && 'bg-yellow-500/20 text-yellow-400',
-                      strategy.risk === 'aggressive' && 'bg-red-500/20 text-red-400'
-                    )}>
-                      {strategy.risk}
-                    </span>
-                  </td>
-                  <td className="text-center py-4 text-gray-300">
-                    ${strategy.minDeposit.toLocaleString()}
-                  </td>
-                  <td className="text-center py-4 text-gray-300">
-                    {strategy.protocols.length}
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Section>
 
       {/* Wallet Connection Prompt Modal */}
       <AnimatePresence>

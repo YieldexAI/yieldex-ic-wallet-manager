@@ -9,7 +9,6 @@ export interface Strategy {
   minDeposit: number;
   maxDeposit: number;
   protocols: string[]; // Protocol IDs
-  allocation: Record<string, number>; // Protocol ID -> allocation percentage
   supportedTokens: string[];
   isActive: boolean;
   totalDeposited: number;
@@ -60,23 +59,18 @@ const generatePerformanceHistory = (baseApy: number, days: number = 30): Perform
 // Yield Strategies
 export const STRATEGIES: Strategy[] = [
   {
-    id: 'conservative-stable',
-    name: 'Conservative Stable',
-    description: 'Low-risk strategy focused on battle-tested protocols with consistent returns',
+    id: 'single-aave',
+    name: 'Single AAVE',
+    description: 'Low-risk strategy focused on battle-tested AAVE V3 protocol with consistent returns',
     risk: 'conservative',
-    expectedApy: 5.49, // Average of AAVE (5.32) + Compound (5.33) + Venus (5.82)
+    expectedApy: 5.32, // AAVE V3 APY
     minDeposit: 100,
     maxDeposit: 1000000,
-    protocols: ['aave-v3', 'compound-iii', 'venus-protocol'],
-    allocation: {
-      'aave-v3': 40,
-      'compound-iii': 35,
-      'venus-protocol': 25
-    },
+    protocols: ['aave-v3'],
     supportedTokens: ['USDC', 'USDT', 'DAI'],
     isActive: true,
     totalDeposited: 25000000,
-    performanceHistory: generatePerformanceHistory(5.49),
+    performanceHistory: generatePerformanceHistory(5.32),
     features: [
       'Battle-tested protocols',
       'Consistent returns',
@@ -94,11 +88,6 @@ export const STRATEGIES: Strategy[] = [
     minDeposit: 500,
     maxDeposit: 500000,
     protocols: ['venus-boosted', 'spark-protocol', 'radiant-capital'],
-    allocation: {
-      'venus-boosted': 30,
-      'spark-protocol': 40,
-      'radiant-capital': 30
-    },
     supportedTokens: ['USDC', 'USDT', 'DAI'],
     isActive: true,
     totalDeposited: 12000000,
@@ -120,11 +109,6 @@ export const STRATEGIES: Strategy[] = [
     minDeposit: 1000,
     maxDeposit: 100000,
     protocols: ['morpho-blue', 'euler-protocol', 'fluid-protocol'],
-    allocation: {
-      'morpho-blue': 45,
-      'euler-protocol': 30,
-      'fluid-protocol': 25
-    },
     supportedTokens: ['USDC', 'USDT', 'DAI'],
     isActive: true,
     totalDeposited: 5500000,
@@ -143,13 +127,13 @@ export const STRATEGIES: Strategy[] = [
 export const MOCK_USER_POSITIONS: UserPosition[] = [
   {
     id: 'pos-1',
-    strategyId: 'conservative-stable',
+    strategyId: 'single-aave',
     amount: 5000,
     token: 'USDC',
     entryDate: '2024-01-15',
     currentValue: 5463.62,
     totalEarnings: 463.62,
-    apy: 5.49,
+    apy: 5.32,
     isActive: true
   },
   {
@@ -165,13 +149,13 @@ export const MOCK_USER_POSITIONS: UserPosition[] = [
   },
   {
     id: 'pos-3',
-    strategyId: 'conservative-stable',
+    strategyId: 'single-aave',
     amount: 10300,
     token: 'USDT',
     entryDate: '2024-01-10',
     currentValue: 10301.15,
     totalEarnings: 1.15,
-    apy: 5.49,
+    apy: 5.32,
     isActive: true
   },
   {
@@ -234,22 +218,17 @@ export const calculateStrategyTVL = (strategy: Strategy): number => {
   return strategy.protocols.reduce((total, protocolId) => {
     const protocol = PROTOCOLS.find(p => p.id === protocolId);
     if (!protocol) return total;
-    
-    const allocation = strategy.allocation[protocolId] || 0;
-    return total + (protocol.tvl * allocation / 100);
+
+    return total + protocol.tvl;
   }, 0);
 };
 
 export const getProtocolsForStrategy = (strategyId: string) => {
   const strategy = getStrategyById(strategyId);
   if (!strategy) return [];
-  
+
   return strategy.protocols.map(protocolId => {
     const protocol = PROTOCOLS.find(p => p.id === protocolId);
-    const allocation = strategy.allocation[protocolId] || 0;
-    return {
-      ...protocol,
-      allocation
-    };
+    return protocol;
   }).filter(Boolean);
 };

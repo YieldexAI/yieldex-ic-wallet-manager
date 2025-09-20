@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Minus, Settings, TrendingUp, AlertTriangle, Send, Shield, CheckCircle, Save } from 'lucide-react';
+import { Plus, Minus, Settings, TrendingUp, Send, Shield, CheckCircle, Save } from 'lucide-react';
 import { PROTOCOLS, Protocol, getProtocolsByRisk } from '@/mock/protocols';
 import { Strategy } from '@/mock/strategies';
 import { fadeVariants, staggerContainer, listItemVariants } from '@/utils/animations';
@@ -9,7 +9,6 @@ import { clsx } from 'clsx';
 
 interface SelectedProtocol {
   protocol: Protocol;
-  allocation: number; // Процент от общего капитала
 }
 
 interface ProtocolRequestModalProps {
@@ -295,18 +294,14 @@ const CustomStrategyBuilder: React.FC = () => {
     ? PROTOCOLS.filter(p => p.isActive)
     : getProtocolsByRisk(riskFilter);
 
-  const totalAllocation = selectedProtocols.reduce((sum, p) => sum + p.allocation, 0);
-  const isValidStrategy = selectedProtocols.length >= 2 && totalAllocation === 100;
+  const isValidStrategy = selectedProtocols.length >= 1;
 
   const addProtocol = (protocol: Protocol) => {
     if (selectedProtocols.find(p => p.protocol.id === protocol.id)) return;
 
-    const remainingAllocation = 100 - totalAllocation;
-    const defaultAllocation = Math.min(remainingAllocation, 50);
-
     setSelectedProtocols(prev => [
       ...prev,
-      { protocol, allocation: defaultAllocation }
+      { protocol }
     ]);
   };
 
@@ -314,11 +309,6 @@ const CustomStrategyBuilder: React.FC = () => {
     setSelectedProtocols(prev => prev.filter(p => p.protocol.id !== protocolId));
   };
 
-  const updateAllocation = (protocolId: string, allocation: number) => {
-    setSelectedProtocols(prev => prev.map(p =>
-      p.protocol.id === protocolId ? { ...p, allocation } : p
-    ));
-  };
 
   const handleProtocolRequest = (request: ProtocolRequest) => {
     // В реальном приложении здесь бы отправлялся запрос на сервер
@@ -327,12 +317,6 @@ const CustomStrategyBuilder: React.FC = () => {
   };
 
   const handleCreateStrategy = (strategyData: { name: string; description: string }) => {
-    // Создаем новую стратегию
-    const allocation: Record<string, number> = {};
-    selectedProtocols.forEach(sp => {
-      allocation[sp.protocol.id] = sp.allocation;
-    });
-
     const newStrategy: Strategy = {
       id: `custom-${Date.now()}`,
       name: strategyData.name,
@@ -342,24 +326,20 @@ const CustomStrategyBuilder: React.FC = () => {
       minDeposit: 100,
       maxDeposit: 1000000,
       protocols: selectedProtocols.map(sp => sp.protocol.id),
-      allocation,
       supportedTokens: ['USDC', 'USDT', 'DAI'],
       isActive: true,
       totalDeposited: 0,
       performanceHistory: [],
       features: [
-        'Custom allocation',
+        'Custom protocol selection',
         `${selectedProtocols.length} protocols`,
         'Personalized strategy',
-        'Real-time rebalancing'
+        'Automatic optimization'
       ]
     };
 
     setCreatedStrategy(newStrategy);
     console.log('Custom strategy created:', newStrategy);
-
-    // В реальном приложении здесь бы стратегия сохранялась в store/backend
-    // Можно добавить в локальный стейт или отправить на сервер
   };
 
   const getRiskColor = (risk: string) => {
@@ -372,14 +352,14 @@ const CustomStrategyBuilder: React.FC = () => {
   };
 
   const estimatedAPY = selectedProtocols.length > 0
-    ? selectedProtocols.reduce((sum, p) => sum + (p.protocol.apy * p.allocation / 100), 0)
+    ? selectedProtocols.reduce((sum, p) => sum + p.protocol.apy, 0) / selectedProtocols.length
     : 0;
 
   const averageRisk = selectedProtocols.length > 0
     ? selectedProtocols.reduce((sum, p) => {
         const riskValue = p.protocol.risk === 'conservative' ? 1 : p.protocol.risk === 'moderate' ? 2 : 3;
-        return sum + (riskValue * p.allocation / 100);
-      }, 0)
+        return sum + riskValue;
+      }, 0) / selectedProtocols.length
     : 0;
 
   const getRiskLabel = (value: number) => {
@@ -403,7 +383,7 @@ const CustomStrategyBuilder: React.FC = () => {
         <div>
           <h3 className="text-xl font-semibold text-white mb-2">Build Your Custom Strategy</h3>
           <p className="text-gray-400">
-            Select protocols and set allocation percentages to create your personalized DeFi strategy
+            Select protocols to create your personalized DeFi strategy. Yieldex will automatically optimize fund allocation for maximum yield.
           </p>
         </div>
       </motion.div>
@@ -439,14 +419,6 @@ const CustomStrategyBuilder: React.FC = () => {
             </div>
           </div>
 
-          {totalAllocation !== 100 && (
-            <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-              <div className="flex items-center text-yellow-400 text-sm">
-                <AlertTriangle size={16} className="mr-2" />
-                Allocation must total 100% (currently {totalAllocation}%)
-              </div>
-            </div>
-          )}
         </motion.div>
       )}
 
@@ -477,30 +449,14 @@ const CustomStrategyBuilder: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={selectedProtocol.allocation}
-                      onChange={(e) => updateAllocation(
-                        selectedProtocol.protocol.id,
-                        Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
-                      )}
-                      className="w-16 px-2 py-1 bg-gray-700/50 border border-gray-600 rounded text-white text-sm text-center"
-                    />
-                    <span className="text-gray-400 text-sm">%</span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeProtocol(selectedProtocol.protocol.id)}
-                    leftIcon={<Minus size={14} />}
-                  >
-                    Remove
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeProtocol(selectedProtocol.protocol.id)}
+                  leftIcon={<Minus size={14} />}
+                >
+                  Remove
+                </Button>
               </div>
             </motion.div>
           ))}
