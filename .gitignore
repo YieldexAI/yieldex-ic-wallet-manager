@@ -49,6 +49,7 @@ project_docs/
 
 # Claude Code assistant files
 CLAUDE.md
+.сlaude/
 
 
 # MCP's
