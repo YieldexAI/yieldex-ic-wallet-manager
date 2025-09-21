@@ -1,18 +1,6 @@
 import { Alchemy, Network } from 'alchemy-sdk';
-import {
-  TokenBalancesResponse,
-  ProcessedTokenBalance,
-  PortfolioSummary,
-  NetworkConfig,
-  StablecoinConfig
-} from './types';
-import {
-  NETWORKS,
-  STABLECOINS,
-  getStablecoinContractsForNetwork,
-  getStablecoinByContract,
-  DEFAULT_NETWORKS
-} from './constants';
+import { ProcessedTokenBalance, PortfolioSummary } from './types';
+import { STABLECOINS, getStablecoinContractsForNetwork, getStablecoinByContract, DEFAULT_NETWORKS } from './constants';
 
 // Create Alchemy instances for different networks
 const createAlchemyInstances = (): Record<string, Alchemy> => {
@@ -43,6 +31,21 @@ const createAlchemyInstances = (): Record<string, Alchemy> => {
     apiKey,
     network: Network.BASE_MAINNET
   });
+
+  instances.bnb = new Alchemy({
+    apiKey,
+    network: Network.BNB_MAINNET
+  });
+
+//   // Binance Smart Chain (BNB) - supported in newer SDKs. Guard if enum absent.
+//   const anyNetwork = Network as any;
+//   const bnbNetwork = anyNetwork.BNB_MAINNET ?? anyNetwork.BSC_MAINNET;
+//   if (bnbNetwork) {
+//     instances.bnb = new Alchemy({
+//       apiKey,
+//       network: bnbNetwork
+//     });
+//   }
 
   return instances;
 };
@@ -109,7 +112,10 @@ export const fetchTokenBalancesForNetwork = async (
         ? BigInt(tokenBalance.tokenBalance).toString()
         : tokenBalance.tokenBalance;
 
-      const formattedBalance = formatTokenBalance(rawBalance, stablecoin.decimals);
+      // Use per-network decimals if provided (e.g., USDC on BNB has 18)
+      const perNetworkDecimals = STABLECOINS[stablecoin.symbol]?.decimalsPerNetwork?.[networkSlug];
+      const decimalsToUse = perNetworkDecimals ?? stablecoin.decimals;
+      const formattedBalance = formatTokenBalance(rawBalance, decimalsToUse);
 
       // Skip if balance is zero
       if (formattedBalance === '0') {

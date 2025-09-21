@@ -1,9 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, TrendingUp } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Button from '@/components/UI/Button';
-import { ProcessedTokenBalance } from '@/services/types';
 
 interface StablecoinCardProps {
   symbol: string;
@@ -118,12 +117,9 @@ const StablecoinCard: React.FC<StablecoinCardProps> = ({
       <div className="mb-4 p-3 bg-gray-700/30 rounded-lg">
         <div className="flex items-center justify-between">
           <span className="text-gray-400 text-sm">USD Value</span>
-          <div className="flex items-center space-x-2">
-            <TrendingUp size={16} className="text-green-400" />
-            <span className="font-semibold text-green-400 text-lg">
-              {formatUSD(usdValue)}
-            </span>
-          </div>
+          <span className="font-semibold text-green-400 text-lg">
+            {formatUSD(usdValue)}
+          </span>
         </div>
       </div>
 

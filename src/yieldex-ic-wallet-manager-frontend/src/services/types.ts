@@ -52,6 +52,10 @@ export interface StablecoinConfig {
     [networkSlug: string]: string; // Contract address per network
   };
   decimals: number;
+  // Some bridged tokens use different decimals on certain networks (e.g., USDC on BNB has 18)
+  decimalsPerNetwork?: {
+    [networkSlug: string]: number;
+  };
   logo?: string;
 }
 
