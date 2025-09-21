@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DollarSign, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react';
 import { Strategy } from '@/mock/strategies';
@@ -33,11 +33,38 @@ const DepositModal: React.FC<DepositModalProps> = ({
   const [step, setStep] = useState<'input' | 'confirm' | 'processing' | 'success'>('input');
   const [error, setError] = useState<string | null>(null);
 
-  const { getTokenBalance } = useWalletBalances();
+  const {
+    getTokenBalance,
+    isLoadingBalances,
+    balancesError,
+    fetchRealBalances,
+    stablecoinBalances
+  } = useWalletBalances();
   const { createPosition, addToPosition, isDepositing } = useUserPositions();
 
   // Get available balance for selected token
   const availableBalance = getTokenBalance(selectedToken);
+
+  // Filter tokens to only show those with positive balance (using stablecoinBalances directly)
+  const availableTokens = useMemo((): string[] => {
+    if (existingPosition) {
+      // For existing position, only allow the same token
+      return [existingPosition.token];
+    }
+
+    // If we have real balance data, use it
+    if (stablecoinBalances.length > 0) {
+      const tokensWithBalance = strategy.supportedTokens.filter(token => {
+        return stablecoinBalances.some(balance =>
+          balance.symbol === token && parseFloat(balance.balance) > 0
+        );
+      });
+      return tokensWithBalance.length > 0 ? tokensWithBalance : strategy.supportedTokens;
+    }
+
+    // Fallback: show all supported tokens if no real data yet
+    return strategy.supportedTokens;
+  }, [existingPosition, strategy.supportedTokens, stablecoinBalances]);
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -49,10 +76,31 @@ const DepositModal: React.FC<DepositModalProps> = ({
       if (existingPosition) {
         setSelectedToken(existingPosition.token);
       } else {
-        setSelectedToken('USDC');
+        // Select the first available token with positive balance
+        const firstAvailableToken = availableTokens[0] || 'USDC';
+        setSelectedToken(firstAvailableToken);
+      }
+      // Refresh real balances when modal opens to ensure latest data
+      fetchRealBalances();
+    }
+  }, [isOpen, existingPosition, fetchRealBalances]);
+
+  // Separate effect to handle token selection when available tokens change
+  useEffect(() => {
+    if (isOpen && !existingPosition && availableTokens.length > 0) {
+      // Only update if current token is not in available tokens
+      if (!availableTokens.includes(selectedToken)) {
+        setSelectedToken(availableTokens[0]);
       }
     }
-  }, [isOpen, existingPosition]);
+  }, [availableTokens, isOpen, existingPosition, selectedToken]);
+
+  // Clear error when token changes
+  useEffect(() => {
+    if (error) {
+      setError(null);
+    }
+  }, [selectedToken]);
 
   const validateAmount = (): string | null => {
     if (!amount || !isValidAmount(amount)) {
@@ -60,16 +108,6 @@ const DepositModal: React.FC<DepositModalProps> = ({
     }
 
     const numAmount = parseFloat(amount);
-    
-    // For adding to existing position, use a smaller minimum (e.g. $10)
-    const minAmount = existingPosition ? 10 : strategy.minDeposit;
-    if (numAmount < minAmount) {
-      return `Minimum ${existingPosition ? 'additional deposit' : 'deposit'} is ${formatCurrency(minAmount)}`;
-    }
-
-    if (numAmount > strategy.maxDeposit) {
-      return `Maximum deposit is ${formatCurrency(strategy.maxDeposit)}`;
-    }
 
     if (numAmount > availableBalance) {
       return `Insufficient ${selectedToken} balance`;
@@ -176,23 +214,48 @@ const DepositModal: React.FC<DepositModalProps> = ({
 
             {/* Amount Input */}
             <div className="space-y-4">
-              <TokenAmountInput
-                label={existingPosition ? "Additional Amount" : "Deposit Amount"}
-                value={amount}
-                onChange={setAmount}
-                selectedToken={selectedToken}
-                onTokenChange={existingPosition ? () => {} : setSelectedToken}
-                availableTokens={existingPosition ? [existingPosition.token] : strategy.supportedTokens}
-                balance={availableBalance}
-                error={error || undefined}
-                placeholder="0.0"
-              />
+              <div>
+                <TokenAmountInput
+                  label={existingPosition ? "Additional Amount" : "Deposit Amount"}
+                  value={amount}
+                  onChange={setAmount}
+                  selectedToken={selectedToken}
+                  onTokenChange={existingPosition ? () => {} : setSelectedToken}
+                  availableTokens={availableTokens}
+                  balance={availableBalance}
+                  error={error || undefined}
+                  placeholder="0.0"
+                />
 
-              {/* Deposit Limits */}
-              <div className="flex justify-between text-xs text-gray-500">
-                <span>Min: {formatCurrency(existingPosition ? 10 : strategy.minDeposit)}</span>
-                <span>Max: {formatCurrency(strategy.maxDeposit)}</span>
+                {/* Balance Loading State */}
+                {isLoadingBalances && (
+                  <div className="flex items-center text-xs text-gray-400 mt-1">
+                    <div className="w-3 h-3 border border-primary-500/30 border-t-primary-500 rounded-full animate-spin mr-2" />
+                    Loading real-time balance...
+                  </div>
+                )}
+
+                {/* Balance Error State */}
+                {balancesError && (
+                  <div className="flex items-center justify-between text-xs text-red-400 mt-1">
+                    <span>Error loading balance: {balancesError}</span>
+                    <button
+                      onClick={fetchRealBalances}
+                      className="text-primary-400 hover:text-primary-300 underline"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                {/* No Tokens Available Warning */}
+                {!isLoadingBalances && !balancesError && availableBalance === 0 && (
+                  <div className="flex items-center text-xs text-yellow-400 mt-1">
+                    <span>⚠️ No {selectedToken} balance available. Please add funds to your wallet first.</span>
+                  </div>
+                )}
               </div>
+
             </div>
 
             {/* Earnings Estimate */}

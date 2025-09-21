@@ -41,6 +41,10 @@ export const useWalletIntegration = () => {
           // Clear any previous connection errors
           connectionError: null,
         });
+
+        // Fetch real balances after successful connection
+        const { fetchRealBalances } = useWalletStore.getState();
+        fetchRealBalances();
       } else {
         console.warn('Unsupported network:', chainId);
 
@@ -53,6 +57,10 @@ export const useWalletIntegration = () => {
           principal: `ic-${address.slice(0, 8)}`,
           connectionError: `Network ${chainId} is not supported. Please switch to a supported network.`,
         });
+
+        // Try to fetch balances anyway (might work for some networks)
+        const { fetchRealBalances } = useWalletStore.getState();
+        fetchRealBalances();
       }
     } else if (!isConnected && storeConnected) {
       console.log('Wallet disconnected, clearing store');

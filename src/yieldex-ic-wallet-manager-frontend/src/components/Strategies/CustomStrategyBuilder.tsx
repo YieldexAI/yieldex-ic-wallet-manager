@@ -323,8 +323,6 @@ const CustomStrategyBuilder: React.FC = () => {
       description: strategyData.description,
       risk: getRiskLabel(averageRisk) as 'conservative' | 'moderate' | 'aggressive',
       expectedApy: estimatedAPY,
-      minDeposit: 100,
-      maxDeposit: 1000000,
       protocols: selectedProtocols.map(sp => sp.protocol.id),
       supportedTokens: ['USDC', 'USDT', 'DAI'],
       isActive: true,

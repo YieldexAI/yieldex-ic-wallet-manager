@@ -107,9 +107,6 @@ const StrategyCard: React.FC<StrategyCardProps> = ({
               )}>
                 {getRiskLabel(strategy.risk)}
               </span>
-              <span className="text-xs text-gray-500">
-                Min: {formatCurrency(strategy.minDeposit)}
-              </span>
             </div>
 
             {/* Protocols */}

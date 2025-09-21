@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useWalletConnection } from '@/stores/walletStore';
+import { useWalletConnection, useStablecoinBalances } from '@/stores/walletStore';
 import { useWalletIntegration } from '@/hooks/useWalletIntegration';
 import RealWalletConnect from '@/components/Wallet/RealWalletConnect';
 import Button from '@/components/UI/Button';
@@ -12,9 +12,12 @@ const MainNavigation: React.FC = () => {
   const location = useLocation();
   const { isConnected } = useWalletConnection();
   const { realIsConnected } = useWalletIntegration();
+  const { fetchRealBalances } = useStablecoinBalances();
 
-  const handleWalletConnected = (address: string, chainId: number) => {
+  const handleWalletConnected = async (address: string, chainId: number) => {
     console.log('Wallet connected:', { address, chainId });
+    // Fetch stablecoin balances immediately after connection
+    await fetchRealBalances();
   };
 
   const handleWalletDisconnected = () => {
@@ -81,6 +84,7 @@ const MainNavigation: React.FC = () => {
             <RealWalletConnect
               onConnected={handleWalletConnected}
               onDisconnected={handleWalletDisconnected}
+              onConnectionSuccess={() => fetchRealBalances()}
             />
           </div>
         </div>

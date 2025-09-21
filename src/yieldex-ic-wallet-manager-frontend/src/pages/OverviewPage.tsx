@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, TrendingUp } from 'lucide-react';
+import { ArrowRight, TrendingUp, RefreshCw, Wallet, PlusCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useWalletConnection, useWalletBalances } from '@/stores/walletStore';
+import { useWalletConnection } from '@/stores/walletStore';
+import { useUserPositions } from '@/stores/strategyStore';
 import { formatCurrency } from '@/utils/formatters';
 import { pageVariants, fadeVariants } from '@/utils/animations';
 import { Section, Container, Grid } from '@/components/UI/Layout';
@@ -11,8 +12,15 @@ import { MetricCard } from '@/components/UI/Card';
 
 const OverviewPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isConnected, evmAddress } = useWalletConnection();
-  const { totalPortfolioValue, balances } = useWalletBalances();
+  const { isConnected, address } = useWalletConnection();
+  const {
+    positions,
+    totalInvested,
+    totalEarnings,
+    totalValue,
+    isDepositing,
+    isWithdrawing
+  } = useUserPositions();
 
   const handleExploreStrategies = () => {
     navigate('/strategies');
@@ -21,6 +29,10 @@ const OverviewPage: React.FC = () => {
   const handleViewDashboard = () => {
     navigate('/dashboard');
   };
+
+  // Get active positions count
+  const activePositionsCount = positions.length;
+  const hasPositions = activePositionsCount > 0;
 
   return (
     <motion.div
@@ -99,39 +111,129 @@ const OverviewPage: React.FC = () => {
         </Container>
       </Section>
 
-      {/* Wallet Balance Overview (when connected) */}
+      {/* Strategy Portfolio Overview (when connected) */}
       {isConnected && (
-        <Section title="Portfolio Overview">
+        <Section>
           <Container>
+            {/* Portfolio Summary */}
             <motion.div
               variants={fadeVariants}
               initial="initial"
               animate="animate"
-              className="space-y-6"
+              className="mb-8"
             >
-              <Grid cols={2} gap="lg" className="md:grid-cols-4">
-                <MetricCard
-                  label="Total Portfolio Value"
-                  value={formatCurrency(totalPortfolioValue)}
-                  icon={<TrendingUp size={24} />}
-                />
-                {Object.entries(balances).map(([token, balance]) => (
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-4">
+                  <Wallet className="text-primary-400" size={28} />
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Your Strategy Portfolio</h2>
+                    <p className="text-gray-400">
+                      Connected wallet: {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {hasPositions ? (
+                <Grid cols={2} gap="lg" className="md:grid-cols-3">
                   <MetricCard
-                    key={token}
-                    label={`${token} Balance`}
-                    value={formatCurrency(balance)}
+                    label="Total Portfolio Value"
+                    value={formatCurrency(totalValue)}
+                    icon={<TrendingUp size={24} />}
+                    className="md:col-span-1"
+                  />
+                  <MetricCard
+                    label="Total Invested"
+                    value={formatCurrency(totalInvested)}
                     icon={<span className="text-lg">💰</span>}
                   />
-                ))}
-              </Grid>
+                  <MetricCard
+                    label="Total Earnings"
+                    value={formatCurrency(totalEarnings)}
+                    icon={<span className="text-lg">📈</span>}
+                    valueClassName={totalEarnings >= 0 ? 'text-green-400' : 'text-red-400'}
+                  />
+                </Grid>
+              ) : (
+                <div className="text-center py-12 bg-gray-800/30 rounded-lg border-2 border-dashed border-gray-600">
+                  <div className="w-16 h-16 bg-primary-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <PlusCircle size={32} className="text-primary-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">No Active Strategies</h3>
+                  <p className="text-gray-400 mb-6 max-w-md mx-auto">
+                    You haven't created any strategy positions yet. Start earning by deploying your first strategy.
+                  </p>
+                  <Button
+                    onClick={handleExploreStrategies}
+                    rightIcon={<ArrowRight size={16} />}
+                    size="lg"
+                    className="bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700"
+                  >
+                    Create Your First Strategy
+                  </Button>
+                </div>
+              )}
+            </motion.div>
 
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            {/* Strategy Positions List (only show if has positions) */}
+            {hasPositions && (
+              <motion.div
+                variants={fadeVariants}
+                initial="initial"
+                animate="animate"
+                className="mb-8"
+              >
+                <h3 className="text-xl font-semibold text-white mb-6">Your Active Positions</h3>
+                <div className="space-y-4">
+                  {positions.map((position) => (
+                    <motion.div
+                      key={position.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-gray-800/50 rounded-lg p-6 border border-gray-700"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <h4 className="font-medium text-white">Strategy #{position.strategyId}</h4>
+                            <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">
+                              Active
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-400">
+                            {position.token} • Invested: {formatCurrency(position.amount)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-semibold text-white">
+                            {formatCurrency(position.realTimeValue)}
+                          </p>
+                          <p className={`text-sm ${position.realTimeEarnings >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {position.realTimeEarnings >= 0 ? '+' : ''}{formatCurrency(position.realTimeEarnings)}
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Action Buttons */}
+            {hasPositions && (
+              <motion.div
+                variants={fadeVariants}
+                initial="initial"
+                animate="animate"
+                className="flex flex-col sm:flex-row gap-4 justify-center"
+              >
                 <Button
                   onClick={handleExploreStrategies}
                   rightIcon={<ArrowRight size={16} />}
                   size="lg"
+                  className="bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700"
                 >
-                  Explore Strategies
+                  Manage Strategies
                 </Button>
                 <Button
                   variant="outline"
@@ -141,8 +243,8 @@ const OverviewPage: React.FC = () => {
                 >
                   View Dashboard
                 </Button>
-              </div>
-            </motion.div>
+              </motion.div>
+            )}
           </Container>
         </Section>
       )}

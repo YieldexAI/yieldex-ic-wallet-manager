@@ -6,8 +6,6 @@ export interface Strategy {
   description: string;
   risk: 'conservative' | 'moderate' | 'aggressive';
   expectedApy: number;
-  minDeposit: number;
-  maxDeposit: number;
   protocols: string[]; // Protocol IDs
   supportedTokens: string[];
   isActive: boolean;
@@ -64,8 +62,6 @@ export const STRATEGIES: Strategy[] = [
     description: 'Low-risk strategy focused on battle-tested AAVE V3 protocol with consistent returns',
     risk: 'conservative',
     expectedApy: 5.32, // AAVE V3 APY
-    minDeposit: 100,
-    maxDeposit: 1000000,
     protocols: ['aave-v3'],
     supportedTokens: ['USDC', 'USDT', 'DAI'],
     isActive: true,
@@ -85,8 +81,6 @@ export const STRATEGIES: Strategy[] = [
     description: 'Balanced approach with higher yields through emerging protocols',
     risk: 'moderate',
     expectedApy: 8.20, // Average of Venus Boosted (7.82) + Spark (8.55) + Radiant (8.22)
-    minDeposit: 500,
-    maxDeposit: 500000,
     protocols: ['venus-boosted', 'spark-protocol', 'radiant-capital'],
     supportedTokens: ['USDC', 'USDT', 'DAI'],
     isActive: true,
@@ -106,8 +100,6 @@ export const STRATEGIES: Strategy[] = [
     description: 'High-risk, high-reward strategy targeting maximum returns',
     risk: 'aggressive',
     expectedApy: 22.17, // Average of Morpho (18.50) + Euler (22.80) + Fluid (25.20)
-    minDeposit: 1000,
-    maxDeposit: 100000,
     protocols: ['morpho-blue', 'euler-protocol', 'fluid-protocol'],
     supportedTokens: ['USDC', 'USDT', 'DAI'],
     isActive: true,

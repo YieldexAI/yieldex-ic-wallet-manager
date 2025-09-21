@@ -49,19 +49,19 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
   };
 
   const success = (title: string, message?: string) => {
-    showToast('success', title, message);
+    showToast('success', title, message, { duration: 5000 });
   };
 
   const error = (title: string, message?: string) => {
-    showToast('error', title, message);
+    showToast('error', title, message, { duration: 5000 });
   };
 
   const warning = (title: string, message?: string) => {
-    showToast('warning', title, message);
+    showToast('warning', title, message, { duration: 5000 });
   };
 
   const info = (title: string, message?: string) => {
-    showToast('info', title, message);
+    showToast('info', title, message, { duration: 5000 });
   };
 
   const value: ToastContextValue = {

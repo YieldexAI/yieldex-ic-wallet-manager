@@ -61,12 +61,7 @@ export const useStrategyStore = create<StrategyStore>()(
       (set, get) => ({
         // Initial state
         strategies: STRATEGIES,
-        userPositions: MOCK_USER_POSITIONS.map(pos => ({
-          ...pos,
-          realTimeValue: pos.currentValue,
-          realTimeEarnings: pos.totalEarnings,
-          updatedAt: new Date()
-        })),
+        userPositions: [], // Start with empty positions - real positions created by user only
         selectedStrategy: null,
         isDepositing: false,
         isWithdrawing: false,

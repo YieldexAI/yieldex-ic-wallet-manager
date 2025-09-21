@@ -12,6 +12,7 @@
   "dependencies": {
     "@headlessui/react": "^2.1.3",
     "@tanstack/react-query": "^5.51.23",
+    "alchemy-sdk": "^3.6.3",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "framer-motion": "^11.3.30",
