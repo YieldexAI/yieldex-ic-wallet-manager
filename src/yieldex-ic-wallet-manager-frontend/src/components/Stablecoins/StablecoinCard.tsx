@@ -19,13 +19,22 @@ interface StablecoinCardProps {
   className?: string;
 }
 
-// Token icons component (you can replace with actual SVG icons later)
-const TokenIcon: React.FC<{ symbol: string; className?: string }> = ({ symbol, className = "w-8 h-8" }) => {
+// Token icon component with public SVGs fallback
+const TokenIcon: React.FC<{ symbol: string; logo?: string; className?: string }> = ({ symbol, logo, className = "w-8 h-8" }) => {
+  if (logo) {
+    return (
+      <div className={`${className} rounded-full overflow-hidden bg-gray-700/50 flex items-center justify-center`}>
+        {/* public/ assets can be referenced with absolute path */}
+        <img src={logo} alt={`${symbol} logo`} className="w-full h-full object-contain p-1" />
+      </div>
+    );
+  }
+
   const icons: Record<string, string> = {
-    USDT: '💚', // Green circle for USDT
-    USDC: '🔵', // Blue circle for USDC
-    USDe: '⚫', // Black circle for USDe
-    DAI: '🟡'  // Yellow circle for DAI
+    USDT: '💚',
+    USDC: '🔵',
+    USDe: '⚫',
+    DAI: '🟡'
   };
 
   return (
@@ -90,7 +99,7 @@ const StablecoinCard: React.FC<StablecoinCardProps> = ({
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center space-x-3">
-          <TokenIcon symbol={symbol} />
+          <TokenIcon symbol={symbol} logo={logo} />
           <div>
             <h3 className="font-semibold text-white text-lg">{symbol}</h3>
             <p className="text-sm text-gray-400">{name}</p>

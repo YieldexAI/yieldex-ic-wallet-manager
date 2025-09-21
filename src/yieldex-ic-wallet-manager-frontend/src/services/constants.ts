@@ -38,6 +38,7 @@ export const STABLECOINS: Record<string, StablecoinConfig> = {
     symbol: 'USDT',
     name: 'Tether USD',
     decimals: 6,
+    logo: '/usdt.svg',
     contracts: {
       ethereum: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
       arbitrum: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
@@ -49,6 +50,7 @@ export const STABLECOINS: Record<string, StablecoinConfig> = {
     symbol: 'USDC',
     name: 'USD Coin',
     decimals: 6,
+    logo: '/usdc.svg',
     contracts: {
       ethereum: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
       arbitrum: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
@@ -60,6 +62,7 @@ export const STABLECOINS: Record<string, StablecoinConfig> = {
     symbol: 'USDe',
     name: 'Ethena USDe',
     decimals: 18,
+    logo: '/ethena-usde-usde-logo.svg',
     contracts: {
       ethereum: '0x4c9EDD5852cd905f086C759E8383e09bff1E68B3',
       arbitrum: '0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34'
@@ -70,6 +73,7 @@ export const STABLECOINS: Record<string, StablecoinConfig> = {
     symbol: 'DAI',
     name: 'Dai Stablecoin',
     decimals: 18,
+    logo: '/dai.svg',
     contracts: {
       ethereum: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
       arbitrum: '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1',

@@ -1,38 +1,30 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, TrendingUp, RefreshCw, Wallet, PlusCircle } from 'lucide-react';
+import { ArrowRight, TrendingUp, RefreshCw, WalletMinimal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useWalletConnection } from '@/stores/walletStore';
-import { useUserPositions } from '@/stores/strategyStore';
-import { formatCurrency } from '@/utils/formatters';
+import { useWalletConnection, useStablecoinBalances } from '@/stores/walletStore';
 import { pageVariants, fadeVariants } from '@/utils/animations';
 import { Section, Container, Grid } from '@/components/UI/Layout';
 import Button from '@/components/UI/Button';
 import { MetricCard } from '@/components/UI/Card';
+import { StablecoinGrid } from '@/components/Stablecoins';
 
 const OverviewPage: React.FC = () => {
   const navigate = useNavigate();
   const { isConnected, address } = useWalletConnection();
   const {
-    positions,
-    totalInvested,
-    totalEarnings,
-    totalValue,
-    isDepositing,
-    isWithdrawing
-  } = useUserPositions();
+    stablecoinBalances,
+    portfolioSummary,
+    isLoadingBalances,
+    balancesError,
+    lastBalanceUpdate,
+    refreshStablecoinBalances
+  } = useStablecoinBalances();
 
   const handleExploreStrategies = () => {
     navigate('/strategies');
   };
 
-  const handleViewDashboard = () => {
-    navigate('/dashboard');
-  };
-
-  // Get active positions count
-  const activePositionsCount = positions.length;
-  const hasPositions = activePositionsCount > 0;
 
   return (
     <motion.div
@@ -111,11 +103,10 @@ const OverviewPage: React.FC = () => {
         </Container>
       </Section>
 
-      {/* Strategy Portfolio Overview (when connected) */}
+      {/* Stablecoin Portfolio Overview (when connected) */}
       {isConnected && (
         <Section>
           <Container>
-            {/* Portfolio Summary */}
             <motion.div
               variants={fadeVariants}
               initial="initial"
@@ -124,130 +115,71 @@ const OverviewPage: React.FC = () => {
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center space-x-4">
-                  <Wallet className="text-primary-400" size={28} />
+                  <div className="w-8 h-8 bg-primary-500/20 rounded-lg flex items-center justify-center">
+                    <WalletMinimal size={18} className="text-primary-400" />
+                  </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-white">Your Strategy Portfolio</h2>
+                    <h2 className="text-2xl font-bold text-white">Your Stablecoin Portfolio</h2>
                     <p className="text-gray-400">
                       Connected wallet: {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'N/A'}
                     </p>
                   </div>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshStablecoinBalances}
+                  disabled={isLoadingBalances}
+                  leftIcon={<RefreshCw size={16} className={isLoadingBalances ? 'animate-spin' : ''} />}
+                >
+                  Refresh
+                </Button>
               </div>
 
-              {hasPositions ? (
-                <Grid cols={2} gap="lg" className="md:grid-cols-3">
+              {/* Portfolio Summary */}
+              {portfolioSummary && (
+                <Grid cols={2} gap="lg" className="md:grid-cols-3 mb-8">
                   <MetricCard
                     label="Total Portfolio Value"
-                    value={formatCurrency(totalValue)}
+                    value={`$${(portfolioSummary.totalUsdValue || 0).toFixed(2)}`}
                     icon={<TrendingUp size={24} />}
                     className="md:col-span-1"
                   />
                   <MetricCard
-                    label="Total Invested"
-                    value={formatCurrency(totalInvested)}
-                    icon={<span className="text-lg">💰</span>}
+                    label="Stablecoins Held"
+                    value={(portfolioSummary.totalTokens || 0).toString()}
+                    icon={<span className="text-lg">🪙</span>}
                   />
                   <MetricCard
-                    label="Total Earnings"
-                    value={formatCurrency(totalEarnings)}
-                    icon={<span className="text-lg">📈</span>}
-                    valueClassName={totalEarnings >= 0 ? 'text-green-400' : 'text-red-400'}
+                    label="Networks"
+                    value={(portfolioSummary.networks?.length || 0).toString()}
+                    icon={<span className="text-lg">🌐</span>}
                   />
                 </Grid>
-              ) : (
-                <div className="text-center py-12 bg-gray-800/30 rounded-lg border-2 border-dashed border-gray-600">
-                  <div className="w-16 h-16 bg-primary-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <PlusCircle size={32} className="text-primary-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-white mb-2">No Active Strategies</h3>
-                  <p className="text-gray-400 mb-6 max-w-md mx-auto">
-                    You haven't created any strategy positions yet. Start earning by deploying your first strategy.
-                  </p>
-                  <Button
-                    onClick={handleExploreStrategies}
-                    rightIcon={<ArrowRight size={16} />}
-                    size="lg"
-                    className="bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700"
-                  >
-                    Create Your First Strategy
-                  </Button>
-                </div>
               )}
+
+              {/* Last Updated */}
+              {lastBalanceUpdate && (
+                <p className="text-sm text-gray-500 mb-6">
+                  Last updated: {lastBalanceUpdate.toLocaleString()}
+                </p>
+              )}
+
+              {/* Stablecoin Grid */}
+              <div>
+                <h3 className="text-xl font-semibold text-white mb-6">Your Stablecoins</h3>
+                <StablecoinGrid
+                  balances={stablecoinBalances}
+                  isLoading={isLoadingBalances}
+                  error={balancesError}
+                />
+              </div>
             </motion.div>
-
-            {/* Strategy Positions List (only show if has positions) */}
-            {hasPositions && (
-              <motion.div
-                variants={fadeVariants}
-                initial="initial"
-                animate="animate"
-                className="mb-8"
-              >
-                <h3 className="text-xl font-semibold text-white mb-6">Your Active Positions</h3>
-                <div className="space-y-4">
-                  {positions.map((position) => (
-                    <motion.div
-                      key={position.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-gray-800/50 rounded-lg p-6 border border-gray-700"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
-                            <h4 className="font-medium text-white">Strategy #{position.strategyId}</h4>
-                            <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">
-                              Active
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-400">
-                            {position.token} • Invested: {formatCurrency(position.amount)}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-semibold text-white">
-                            {formatCurrency(position.realTimeValue)}
-                          </p>
-                          <p className={`text-sm ${position.realTimeEarnings >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {position.realTimeEarnings >= 0 ? '+' : ''}{formatCurrency(position.realTimeEarnings)}
-                          </p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {/* Action Buttons */}
-            {hasPositions && (
-              <motion.div
-                variants={fadeVariants}
-                initial="initial"
-                animate="animate"
-                className="flex flex-col sm:flex-row gap-4 justify-center"
-              >
-                <Button
-                  onClick={handleExploreStrategies}
-                  rightIcon={<ArrowRight size={16} />}
-                  size="lg"
-                  className="bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700"
-                >
-                  Manage Strategies
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleViewDashboard}
-                  rightIcon={<ArrowRight size={16} />}
-                  size="lg"
-                >
-                  View Dashboard
-                </Button>
-              </motion.div>
-            )}
           </Container>
         </Section>
       )}
+
+      
 
       {/* Call to Action (when not connected) */}
       {!isConnected && (
