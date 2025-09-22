@@ -31,6 +31,7 @@ interface TransactionStore {
 
   // Getters
   getTransactionsByPosition: (positionId: string) => Transaction[];
+  getActivityByPosition: (positionId: string) => (Transaction | TransactionGroup)[];
   getRecentActivity: (limit?: number) => (Transaction | TransactionGroup)[];
   getFilteredTransactions: () => Transaction[];
   getTransactionsByType: (type: TransactionType) => Transaction[];
@@ -127,6 +128,26 @@ export const useTransactionStore = create<TransactionStore>()(
           return transactions.filter(tx => tx.positionId === positionId);
         },
 
+        getActivityByPosition: (positionId) => {
+          const { transactions, transactionGroups } = get();
+
+          // Get individual transactions for this position
+          const positionTransactions = transactions.filter(tx => tx.positionId === positionId);
+
+          // Get transaction groups that contain transactions for this position
+          const positionGroups = transactionGroups.filter(group =>
+            group.transactions.some(tx => tx.positionId === positionId)
+          );
+
+          // Combine and sort by timestamp
+          const allActivity = [
+            ...positionTransactions,
+            ...positionGroups
+          ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+          return allActivity;
+        },
+
         getRecentActivity: (limit = 10) => {
           const { transactions, transactionGroups } = get();
 
@@ -188,65 +209,99 @@ export const useTransactionStore = create<TransactionStore>()(
         generateMockActivity: (positionId) => {
           const { addTransaction, addTransactionGroup } = get();
 
+          // Only generate rebalance for specific positions to show variety
+          const shouldGenerateRebalance = positionId && (
+            positionId.includes('position-2') ||
+            positionId.includes('position-3') ||
+            positionId.includes('usdc') ||
+            true // Force for all positions for demo
+          );
+
           // Create some mock transactions for testing
           const now = Date.now();
 
-          // Recent rebalancing group
-          const rebalanceGroup: Omit<TransactionGroup, 'id' | 'timestamp'> = {
-            type: 'rebalancing_sequence',
-            description: 'Rebalanced to higher yield protocol',
-            status: 'completed',
-            totalGasCost: 0.0025,
-            transactions: [
-              {
-                id: `tx-${now}-1`,
-                positionId,
-                type: 'opportunity_detection',
-                status: 'completed',
-                timestamp: new Date(now - 15 * 60 * 1000).toISOString(),
-                description: 'Found better yield opportunity: AAVE V3 (6.1% APY)',
-                icon: '🎯',
-                color: 'text-blue-400',
-                blockchainRefs: []
-              },
-              {
-                id: `tx-${now}-2`,
-                positionId,
-                type: 'withdrawal',
-                status: 'completed',
-                timestamp: new Date(now - 12 * 60 * 1000).toISOString(),
+          if (shouldGenerateRebalance) {
+            // Enhanced rebalancing group with AI decision chain
+            const rebalanceGroup: Omit<TransactionGroup, 'id' | 'timestamp'> = {
+              type: 'rebalancing_sequence',
+              description: 'AI-Powered Rebalance: Compound → AAVE',
+              status: 'completed',
+              totalGasCost: 0.0025,
+              groupIcon: '🤖',
+              rebalanceDetails: {
+                fromProtocol: 'Compound III',
+                toProtocol: 'AAVE V3',
+                reason: 'Higher yield opportunity detected with better risk profile',
+                oldApy: 4.2,
+                newApy: 6.1,
                 amount: 4.50,
-                token: 'DAI',
-                description: 'Withdrew from AAVE V3',
-                icon: '📤',
-                color: 'text-orange-400',
-                blockchainRefs: [{
-                  network: 'ethereum',
-                  txHash: '0x1234567890abcdef1234567890abcdef12345678',
-                  explorerUrl: 'https://sepolia.etherscan.io/tx/0x1234567890abcdef1234567890abcdef12345678'
-                }]
+                token: 'USDC',
+                potentialSavings: 0.095, // (6.1 - 4.2) * 4.50 / 100 * 365/365
+                actualSavings: 0.091,
+                confidenceScore: 0.87
               },
-              {
-                id: `tx-${now}-3`,
-                positionId,
-                type: 'deposit',
-                status: 'completed',
-                timestamp: new Date(now - 10 * 60 * 1000).toISOString(),
-                amount: 4.50,
-                token: 'DAI',
-                description: 'Deposited to AAVE V3',
-                icon: '📥',
-                color: 'text-green-400',
-                blockchainRefs: [{
-                  network: 'arbitrum',
-                  txHash: '0xabcdef1234567890abcdef1234567890abcdef12',
-                  explorerUrl: 'https://arbiscan.io/tx/0xabcdef1234567890abcdef1234567890abcdef12'
-                }]
-              }
-            ]
-          };
+              transactions: [
+                {
+                  id: `tx-${now}-1`,
+                  positionId,
+                  type: 'ai_decision',
+                  status: 'completed',
+                  timestamp: new Date(now - 18 * 60 * 1000).toISOString(),
+                  description: 'AI analyzed market conditions',
+                  icon: '🤖',
+                  color: 'text-blue-400',
+                  blockchainRefs: [],
+                  rebalanceDetails: {
+                    fromProtocol: 'Compound III',
+                    toProtocol: 'AAVE V3',
+                    reason: 'Market analysis showed 1.9% APY improvement with lower risk',
+                    oldApy: 4.2,
+                    newApy: 6.1,
+                    amount: 4.50,
+                    token: 'USDC',
+                    confidenceScore: 0.87
+                  }
+                },
+                {
+                  id: `tx-${now}-2`,
+                  positionId,
+                  type: 'withdrawal',
+                  status: 'completed',
+                  timestamp: new Date(now - 12 * 60 * 1000).toISOString(),
+                  amount: 4.50,
+                  token: 'USDC',
+                  description: 'Withdrew from Compound III',
+                  icon: '📤',
+                  color: 'text-orange-400',
+                  blockchainRefs: [{
+                    network: 'arbitrum',
+                    txHash: '0x1234567890abcdef1234567890abcdef12345678',
+                    explorerUrl: 'https://arbiscan.io/tx/0x1234567890abcdef1234567890abcdef12345678'
+                  }]
+                },
+                {
+                  id: `tx-${now}-3`,
+                  positionId,
+                  type: 'deposit',
+                  status: 'completed',
+                  timestamp: new Date(now - 8 * 60 * 1000).toISOString(),
+                  amount: 4.50,
+                  token: 'USDC',
+                  description: 'Deposited to AAVE V3',
+                  icon: '📥',
+                  color: 'text-green-400',
+                  blockchainRefs: [{
+                    network: 'ethereum',
+                    txHash: '0xabcdef1234567890abcdef1234567890abcdef12',
+                    explorerUrl: 'https://sepolia.etherscan.io/tx/0xabcdef1234567890abcdef1234567890abcdef12'
+                  }]
+                }
+              ]
+            };
 
-          addTransactionGroup(rebalanceGroup);
+            console.log('Adding rebalance group for position:', positionId);
+            addTransactionGroup(rebalanceGroup);
+          }
 
           // Recent yield collection
           addTransaction({
@@ -298,23 +353,97 @@ export const useTransactionStore = create<TransactionStore>()(
         },
 
         initializeWithDefaultActivity: (positionId?: string) => {
-          const { transactions, addTransaction } = get();
+          const { transactions, transactionGroups, addTransaction, addTransactionGroup } = get();
 
           // For position-specific initialization, check if position has transactions
           if (positionId) {
             const positionTransactions = transactions.filter(tx => tx.positionId === positionId);
-            if (positionTransactions.length === 0) {
+            const positionGroups = transactionGroups.filter(group =>
+              group.transactions.some(tx => tx.positionId === positionId)
+            );
+
+            if (positionTransactions.length === 0 && positionGroups.length === 0) {
               // Add default transactions for this position
               const now = Date.now();
 
-              // 1. Withdrawal transaction
+              // 1. Add one rebalance transaction group
+              const rebalanceGroup = {
+                type: 'rebalancing_sequence' as const,
+                description: 'AI-Powered Rebalance: Compound → AAVE',
+                status: 'completed' as const,
+                totalGasCost: 0.0025,
+                groupIcon: '🤖',
+                rebalanceDetails: {
+                  fromProtocol: 'Compound III',
+                  toProtocol: 'AAVE V3',
+                  reason: 'Higher yield opportunity detected with better risk profile',
+                  oldApy: 4.2,
+                  newApy: 6.1,
+                  amount: 4.50,
+                  token: 'USDC',
+                  potentialSavings: 0.095,
+                  actualSavings: 0.091,
+                  confidenceScore: 0.87
+                },
+                transactions: [
+                  {
+                    id: `tx-${now}-1`,
+                    positionId,
+                    type: 'ai_decision' as const,
+                    status: 'completed' as const,
+                    timestamp: new Date(now - 20 * 60 * 1000).toISOString(),
+                    description: 'AI analyzed market conditions',
+                    icon: '🤖',
+                    color: 'text-blue-400',
+                    blockchainRefs: []
+                  },
+                  {
+                    id: `tx-${now}-2`,
+                    positionId,
+                    type: 'withdrawal' as const,
+                    status: 'completed' as const,
+                    timestamp: new Date(now - 18 * 60 * 1000).toISOString(),
+                    amount: 4.50,
+                    token: 'USDC',
+                    description: 'Withdrew from Compound III',
+                    icon: '📤',
+                    color: 'text-orange-400',
+                    blockchainRefs: [{
+                      network: 'arbitrum' as const,
+                      txHash: '0x1234567890abcdef1234567890abcdef12345678',
+                      explorerUrl: 'https://arbiscan.io/tx/0x1234567890abcdef1234567890abcdef12345678'
+                    }]
+                  },
+                  {
+                    id: `tx-${now}-3`,
+                    positionId,
+                    type: 'deposit' as const,
+                    status: 'completed' as const,
+                    timestamp: new Date(now - 15 * 60 * 1000).toISOString(),
+                    amount: 4.50,
+                    token: 'USDC',
+                    description: 'Deposited to AAVE V3',
+                    icon: '📥',
+                    color: 'text-green-400',
+                    blockchainRefs: [{
+                      network: 'ethereum' as const,
+                      txHash: '0xabcdef1234567890abcdef1234567890abcdef12',
+                      explorerUrl: 'https://sepolia.etherscan.io/tx/0xabcdef1234567890abcdef1234567890abcdef12'
+                    }]
+                  }
+                ]
+              };
+
+              addTransactionGroup(rebalanceGroup);
+
+              // 2. Withdrawal transaction
               addTransaction({
                 positionId,
                 type: 'withdrawal',
                 status: 'completed',
                 amount: 2.5,
                 token: 'USDC',
-                description: 'Withdrew funds from AAVE V3',
+                description: 'Withdrew funds from Compound V3',
                 icon: '📤',
                 color: 'text-orange-400',
                 blockchainRefs: [{
@@ -324,14 +453,14 @@ export const useTransactionStore = create<TransactionStore>()(
                 }]
               });
 
-              // 2. Supply transaction (earlier than withdrawal)
+              // 3. Supply transaction (earlier than withdrawal)
               addTransaction({
                 positionId,
                 type: 'deposit',
                 status: 'completed',
                 amount: 5.0,
                 token: 'USDC',
-                description: 'Supplied funds to AAVE V3',
+                description: 'Supplied funds to Compound V3',
                 icon: '📥',
                 color: 'text-green-400',
                 blockchainRefs: [{
@@ -341,7 +470,7 @@ export const useTransactionStore = create<TransactionStore>()(
                 }]
               });
 
-              // 3. Smart-wallet creation (earliest transaction)
+              // 4. Smart-wallet creation (earliest transaction)
               addTransaction({
                 positionId,
                 type: 'smart_wallet_creation',

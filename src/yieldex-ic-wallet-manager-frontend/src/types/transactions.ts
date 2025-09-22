@@ -3,6 +3,7 @@ export type TransactionType =
   | 'deposit'
   | 'withdrawal'
   | 'rebalancing'
+  | 'ai_decision'
   | 'opportunity_detection'
   | 'yield_collection'
   | 'protocol_switch';
@@ -26,6 +27,9 @@ export interface RebalanceDetails {
   newApy: number;
   amount: number;
   token: string;
+  potentialSavings?: number;
+  actualSavings?: number;
+  confidenceScore?: number;
 }
 
 export interface Transaction {
@@ -64,6 +68,9 @@ export interface TransactionGroup {
   transactions: Transaction[];
   totalGasCost?: number;
   status: TransactionStatus;
+  rebalanceDetails?: RebalanceDetails;
+  aiDecisionId?: string;
+  groupIcon?: string;
 }
 
 export interface ActivityFilter {

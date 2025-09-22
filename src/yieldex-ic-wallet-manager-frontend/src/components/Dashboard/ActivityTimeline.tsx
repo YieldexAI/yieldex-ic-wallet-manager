@@ -7,10 +7,12 @@ import {
   ChevronUp,
   Filter,
   RefreshCw,
-  Activity as ActivityIcon
+  Activity as ActivityIcon,
+  TrendingUp,
+  ArrowRight
 } from 'lucide-react';
 import { useTransactionStore, useRecentActivity } from '@/stores/transactionStore';
-import { Transaction, TransactionGroup, TransactionType } from '@/types/transactions';
+import { Transaction, TransactionGroup, TransactionType, RebalanceDetails } from '@/types/transactions';
 import { formatCurrency, formatTimeAgo } from '@/utils/formatters';
 import { fadeVariants, staggerContainer, listItemVariants } from '@/utils/animations';
 import Card, { CardHeader, CardTitle, CardContent } from '@/components/UI/Card';
@@ -36,6 +38,7 @@ const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
 
   const {
     getTransactionsByPosition,
+    getActivityByPosition,
     getFilteredTransactions,
     activeFilter,
     setFilter,
@@ -52,7 +55,7 @@ const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
 
   // Get activity data based on positionId filter
   const activityData = positionId
-    ? getTransactionsByPosition(positionId).slice(0, limit)
+    ? getActivityByPosition(positionId).slice(0, limit)
     : getFilteredTransactions().slice(0, limit);
 
   const toggleExpanded = (id: string) => {
@@ -149,7 +152,7 @@ const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
                 <div>
                   <h4 className="text-sm font-medium text-white mb-2">Transaction Types</h4>
                   <div className="flex flex-wrap gap-2">
-                    {['deposit', 'withdrawal', 'rebalancing', 'yield_collection', 'smart_wallet_creation'].map((type) => (
+                    {['deposit', 'withdrawal', 'rebalancing', 'ai_decision', 'yield_collection', 'smart_wallet_creation'].map((type) => (
                       <Badge
                         key={type}
                         variant={activeFilter.types.includes(type as TransactionType) ? 'primary' : 'secondary'}
@@ -272,12 +275,42 @@ const TransactionItem: React.FC<{ transaction: Transaction }> = ({ transaction }
   );
 };
 
-// Transaction Group Item (for rebalancing sequences)
+// Enhanced Transaction Group Item (for rebalancing sequences)
 const TransactionGroupItem: React.FC<{
   group: TransactionGroup;
   isExpanded: boolean;
   onToggleExpanded: () => void;
 }> = ({ group, isExpanded, onToggleExpanded }) => {
+  const isRebalancing = group.type === 'rebalancing_sequence';
+  const rebalanceDetails = group.rebalanceDetails;
+
+  const getGroupIcon = () => {
+    if (isRebalancing) return '🤖';
+    return group.groupIcon || '🔄';
+  };
+
+  const getGroupDescription = () => {
+    if (isRebalancing && rebalanceDetails) {
+      return `AI Rebalance: ${rebalanceDetails.fromProtocol} → ${rebalanceDetails.toProtocol}`;
+    }
+    return group.description;
+  };
+
+  const getSavingsInfo = () => {
+    if (isRebalancing && rebalanceDetails) {
+      const apyDiff = rebalanceDetails.newApy - rebalanceDetails.oldApy;
+      const isPositive = apyDiff > 0;
+      return {
+        display: `${isPositive ? '+' : ''}${apyDiff.toFixed(2)}% APY`,
+        color: isPositive ? 'text-green-400' : 'text-red-400',
+        bgColor: isPositive ? 'bg-green-400/10' : 'bg-red-400/10'
+      };
+    }
+    return null;
+  };
+
+  const savingsInfo = getSavingsInfo();
+
   return (
     <div className="bg-gray-800/30 rounded-lg overflow-hidden">
       <div
@@ -285,17 +318,29 @@ const TransactionGroupItem: React.FC<{
         onClick={onToggleExpanded}
       >
         <div className="flex-shrink-0">
-          <div className="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center">
-            🔄
+          <div className={clsx(
+            'w-8 h-8 rounded-full flex items-center justify-center text-lg',
+            isRebalancing ? 'bg-blue-500/20 border border-blue-500/30' : 'bg-primary-500/20'
+          )}>
+            {getGroupIcon()}
           </div>
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
             <h4 className="text-sm font-medium text-white">
-              {group.description}
+              {getGroupDescription()}
             </h4>
             <div className="flex items-center space-x-2 ml-4">
+              {savingsInfo && (
+                <Badge
+                  variant="secondary"
+                  size="sm"
+                  className={clsx(savingsInfo.color, savingsInfo.bgColor)}
+                >
+                  {savingsInfo.display}
+                </Badge>
+              )}
               <Badge variant="secondary" size="sm">
                 {group.transactions.length} steps
               </Badge>
@@ -318,11 +363,18 @@ const TransactionGroupItem: React.FC<{
             <p className="text-xs text-gray-400">
               {formatTimeAgo(new Date(group.timestamp))}
             </p>
-            {group.totalGasCost && (
-              <span className="text-xs text-gray-400">
-                Gas: {group.totalGasCost} ETH
-              </span>
-            )}
+            <div className="flex items-center space-x-3 text-xs text-gray-400">
+              {rebalanceDetails && (
+                <span>
+                  {formatCurrency(rebalanceDetails.amount)} {rebalanceDetails.token}
+                </span>
+              )}
+              {group.totalGasCost && (
+                <span>
+                  Gas: {group.totalGasCost} ETH
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -336,37 +388,161 @@ const TransactionGroupItem: React.FC<{
             transition={{ duration: 0.2 }}
             className="border-t border-gray-700"
           >
-            <div className="p-4 space-y-3">
-              {group.transactions.map((transaction, index) => (
-                <div key={transaction.id} className="flex items-center space-x-3 text-sm">
-                  <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs">
-                    {index + 1}
-                  </div>
-                  <div className="flex-1">
-                    <span className="text-white">{transaction.description}</span>
-                    {transaction.amount && (
-                      <span className="ml-2 text-gray-400">
-                        ({formatCurrency(transaction.amount)} {transaction.token})
-                      </span>
-                    )}
-                  </div>
-                  {transaction.blockchainRefs[0]?.explorerUrl && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      rightIcon={<ExternalLink size={12} />}
-                      onClick={() => window.open(transaction.blockchainRefs[0].explorerUrl, '_blank')}
-                      className="text-xs text-blue-400 hover:text-blue-300"
-                    >
-                      View
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
+            {isRebalancing ? (
+              <RebalanceSequenceView
+                transactions={group.transactions}
+                rebalanceDetails={rebalanceDetails}
+              />
+            ) : (
+              <div className="p-4 space-y-3">
+                {group.transactions.map((transaction, index) => (
+                  <StandardTransactionStep
+                    key={transaction.id}
+                    transaction={transaction}
+                    index={index}
+                  />
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+};
+
+// Enhanced Rebalance Sequence View
+const RebalanceSequenceView: React.FC<{
+  transactions: Transaction[];
+  rebalanceDetails?: RebalanceDetails;
+}> = ({ transactions, rebalanceDetails }) => {
+  return (
+    <div className="p-4">
+      {/* Rebalance Summary */}
+      {rebalanceDetails && (
+        <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-blue-400 font-medium text-sm">Rebalance Summary</span>
+            {rebalanceDetails.confidenceScore && (
+              <Badge variant="secondary" size="sm" className="text-blue-400 bg-blue-400/10">
+                {Math.round(rebalanceDetails.confidenceScore * 100)}% confidence
+              </Badge>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <p className="text-gray-400">From</p>
+              <p className="text-white">{rebalanceDetails.fromProtocol} ({rebalanceDetails.oldApy.toFixed(2)}% APY)</p>
+            </div>
+            <div>
+              <p className="text-gray-400">To</p>
+              <p className="text-white">{rebalanceDetails.toProtocol} ({rebalanceDetails.newApy.toFixed(2)}% APY)</p>
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-gray-300">
+            <strong>Reason:</strong> {rebalanceDetails.reason}
+          </div>
+        </div>
+      )}
+
+      {/* Transaction Steps with Visual Connection */}
+      <div className="space-y-0">
+        {transactions.map((transaction, index) => (
+          <div key={transaction.id} className="relative">
+            <div className="flex items-center space-x-3 py-3">
+              {/* Step Icon */}
+              <div className="flex-shrink-0 relative z-10">
+                <div className={clsx(
+                  'w-8 h-8 rounded-full flex items-center justify-center text-lg border-2',
+                  transaction.status === 'completed' ? 'bg-green-500/20 border-green-500/50' :
+                  transaction.status === 'processing' ? 'bg-blue-500/20 border-blue-500/50' :
+                  transaction.status === 'failed' ? 'bg-red-500/20 border-red-500/50' :
+                  'bg-gray-700 border-gray-600'
+                )}>
+                  {transaction.icon}
+                </div>
+              </div>
+
+              {/* Step Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-medium text-white">
+                      {transaction.description}
+                    </h4>
+                    {transaction.amount && (
+                      <p className="text-xs text-gray-400">
+                        {formatCurrency(transaction.amount)} {transaction.token}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Badge
+                      variant="secondary"
+                      size="sm"
+                      className={getStatusColor(transaction.status)}
+                    >
+                      {transaction.status}
+                    </Badge>
+                    {transaction.blockchainRefs[0]?.explorerUrl && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        rightIcon={<ExternalLink size={12} />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(transaction.blockchainRefs[0].explorerUrl, '_blank');
+                        }}
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        View
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Connection Line */}
+            {index < transactions.length - 1 && (
+              <div className="absolute left-4 top-11 w-0.5 h-3 bg-gray-600 z-0" />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Standard Transaction Step Component
+const StandardTransactionStep: React.FC<{
+  transaction: Transaction;
+  index: number;
+}> = ({ transaction, index }) => {
+  return (
+    <div className="flex items-center space-x-3 text-sm">
+      <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs">
+        {index + 1}
+      </div>
+      <div className="flex-1">
+        <span className="text-white">{transaction.description}</span>
+        {transaction.amount && (
+          <span className="ml-2 text-gray-400">
+            ({formatCurrency(transaction.amount)} {transaction.token})
+          </span>
+        )}
+      </div>
+      {transaction.blockchainRefs[0]?.explorerUrl && (
+        <Button
+          variant="ghost"
+          size="sm"
+          rightIcon={<ExternalLink size={12} />}
+          onClick={() => window.open(transaction.blockchainRefs[0].explorerUrl, '_blank')}
+          className="text-xs text-blue-400 hover:text-blue-300"
+        >
+          View
+        </Button>
+      )}
     </div>
   );
 };
