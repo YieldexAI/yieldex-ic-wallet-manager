@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import ToastContainer, { Toast, ToastType } from '@/components/UI/Toast';
 
 interface ToastContextValue {
@@ -44,9 +44,9 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
     setToasts((prev) => [...prev, newToast]);
   };
 
-  const removeToast = (id: string) => {
+  const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  };
+  }, []);
 
   const success = (title: string, message?: string) => {
     showToast('success', title, message, { duration: 5000 });

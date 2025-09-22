@@ -24,10 +24,11 @@ interface ToastItemProps {
 
 const ToastItem: React.FC<ToastItemProps> = ({ toast, onClose }) => {
   useEffect(() => {
-    if (toast.duration !== 0) {
+    // Auto-dismiss if duration is set and not 0
+    if (toast.duration && toast.duration > 0) {
       const timer = setTimeout(() => {
         onClose(toast.id);
-      }, toast.duration || 5000);
+      }, toast.duration);
 
       return () => clearTimeout(timer);
     }

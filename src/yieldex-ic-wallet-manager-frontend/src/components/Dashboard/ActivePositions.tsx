@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  TrendingUp, 
-  Download, 
+import {
+  TrendingUp,
+  Download,
   Target,
   DollarSign,
   Activity,
@@ -10,6 +10,7 @@ import {
   Minus
 } from 'lucide-react';
 import { useUserPositions, useRealTimeSimulation } from '@/stores/strategyStore';
+import { useTransactionStore } from '@/stores/transactionStore';
 import { getStrategyById } from '@/mock/strategies';
 import { formatCurrency, formatAPY, formatTimeAgo } from '@/utils/formatters';
 import { cardVariants, staggerContainer, listItemVariants, counterVariants } from '@/utils/animations';
@@ -19,24 +20,36 @@ import Button from '@/components/UI/Button';
 import Modal from '@/components/UI/Modal';
 import { TokenAmountInput } from '@/components/UI/Input';
 import DepositModal from '@/components/Strategies/DepositModal';
+import QuickActionButtons from './QuickActionButtons';
 import { clsx } from 'clsx';
 
 const ActivePositions: React.FC = () => {
   const [selectedPosition, setSelectedPosition] = useState<string | null>(null);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
+  const [showManageModal, setShowManageModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  
-  const { 
-    positions, 
-    totalValue, 
-    totalEarnings, 
-    withdrawPosition, 
+
+  const {
+    positions,
+    totalValue,
+    totalEarnings,
+    withdrawPosition,
     closePosition,
-    isWithdrawing 
+    isWithdrawing
   } = useUserPositions();
-  
+
   const { simulationActive } = useRealTimeSimulation();
+  const { generateMockActivity } = useTransactionStore();
+
+  // Generate mock activity data for demonstration
+  useEffect(() => {
+    if (positions.length > 0) {
+      positions.forEach(position => {
+        generateMockActivity(position.id);
+      });
+    }
+  }, [positions, generateMockActivity]);
 
   const selectedPositionData = positions.find(p => p.id === selectedPosition);
   const selectedStrategy = selectedPositionData 
@@ -73,6 +86,11 @@ const ActivePositions: React.FC = () => {
   const openDepositModal = (positionId: string) => {
     setSelectedPosition(positionId);
     setShowDepositModal(true);
+  };
+
+  const openManageModal = (positionId: string) => {
+    setSelectedPosition(positionId);
+    setShowManageModal(true);
   };
 
   const handleWithdrawAll = async (positionId: string) => {
@@ -199,6 +217,7 @@ const ActivePositions: React.FC = () => {
                       onWithdraw={() => openWithdrawModal(position.id)}
                       onWithdrawAll={() => handleWithdrawAll(position.id)}
                       onAddMore={() => openDepositModal(position.id)}
+                      onManage={() => openManageModal(position.id)}
                       onClose={() => handleClosePosition(position.id)}
                       isWithdrawing={isWithdrawing}
                     />
@@ -296,6 +315,61 @@ const ActivePositions: React.FC = () => {
           }}
         />
       )}
+
+      {/* Manage Modal */}
+      {selectedPositionData && selectedStrategy && (
+        <Modal
+          isOpen={showManageModal}
+          onClose={() => {
+            setShowManageModal(false);
+            setSelectedPosition(null);
+          }}
+          title="Manage Position"
+          size="lg"
+        >
+          <div className="space-y-6">
+            {/* Position Summary */}
+            <div className="p-4 bg-gray-800/50 rounded-lg">
+              <h3 className="font-semibold text-white mb-2">{selectedStrategy.name}</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-400">Current Value</p>
+                  <p className="text-white font-medium">
+                    {formatCurrency(selectedPositionData.realTimeValue)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-400">Total Earnings</p>
+                  <p className="text-green-400 font-medium">
+                    +{formatCurrency(selectedPositionData.realTimeEarnings)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <QuickActionButtons
+              positionId={selectedPositionData.id}
+              onAddMore={() => {
+                setShowManageModal(false);
+                openDepositModal(selectedPositionData.id);
+              }}
+              onWithdraw={() => {
+                setShowManageModal(false);
+                openWithdrawModal(selectedPositionData.id);
+              }}
+              onWithdrawAll={() => {
+                setShowManageModal(false);
+                handleWithdrawAll(selectedPositionData.id);
+              }}
+              onManage={() => {
+                // Already in manage modal
+              }}
+              isWithdrawing={isWithdrawing}
+            />
+          </div>
+        </Modal>
+      )}
     </>
   );
 };
@@ -310,28 +384,27 @@ const PositionCard: React.FC<{
   onWithdraw: () => void;
   onWithdrawAll: () => void;
   onAddMore: () => void;
+  onManage: () => void;
   onClose: () => void;
   isWithdrawing: boolean;
-}> = ({ 
-  position, 
-  strategy, 
-  earnings, 
-  earningsPercentage, 
-  isPositive, 
+}> = ({
+  position,
+  strategy,
+  earnings,
+  earningsPercentage,
+  isPositive,
   onWithdraw,
-  onWithdrawAll, 
+  onWithdrawAll,
   onAddMore,
+  onManage,
   onClose,
-  isWithdrawing 
+  isWithdrawing
 }) => {
-  const [showActions, setShowActions] = useState(false);
 
   return (
-    <Card 
-      variant="glass" 
-      className="cursor-pointer hover:bg-gray-800/50 transition-colors"
-      clickable={true}
-      onClick={() => setShowActions(!showActions)}
+    <Card
+      variant="glass"
+      className="hover:bg-gray-800/50 transition-colors"
     >
       <CardHeader>
         <div className="flex items-center justify-between">
@@ -339,7 +412,7 @@ const PositionCard: React.FC<{
             <Target className="w-5 h-5 text-primary-400" />
             <span>{strategy?.name || 'Unknown Strategy'}</span>
           </CardTitle>
-          
+
           <div className="flex items-center space-x-2">
             <div className="text-right">
               <motion.div
@@ -358,8 +431,6 @@ const PositionCard: React.FC<{
                 {isPositive ? '+' : ''}{formatCurrency(earnings)} ({earningsPercentage.toFixed(2)}%)
               </div>
             </div>
-            
-            <div className="text-gray-400 text-xs">Click to manage</div>
           </div>
         </div>
       </CardHeader>
@@ -394,58 +465,16 @@ const PositionCard: React.FC<{
         </div>
       </CardContent>
 
-      <AnimatePresence>
-        {showActions && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <CardFooter>
-              <div className="grid grid-cols-2 gap-2 w-full">
-                {/* Top row */}
-                <Button
-                  variant="outline"
-                  onClick={onAddMore}
-                  disabled={isWithdrawing}
-                  leftIcon={<Plus size={16} />}
-                  className="text-green-400 border-green-400/30 hover:bg-green-400/10"
-                >
-                  Add More
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={onWithdraw}
-                  disabled={isWithdrawing}
-                  leftIcon={<Download size={16} />}
-                >
-                  Withdraw
-                </Button>
-                
-                {/* Bottom row */}
-                <Button
-                  variant="outline"
-                  onClick={onWithdrawAll}
-                  disabled={isWithdrawing}
-                  leftIcon={<Minus size={16} />}
-                  className="text-orange-400 border-orange-400/30 hover:bg-orange-400/10"
-                >
-                  Withdraw All
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={onClose}
-                  disabled={isWithdrawing}
-                  className="text-red-400 hover:text-red-300 hover:bg-red-400/10"
-                >
-                  Close Position
-                </Button>
-              </div>
-            </CardFooter>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <CardFooter>
+        <QuickActionButtons
+          positionId={position.id}
+          onAddMore={onAddMore}
+          onWithdraw={onWithdraw}
+          onWithdrawAll={onWithdrawAll}
+          onManage={onManage}
+          isWithdrawing={isWithdrawing}
+        />
+      </CardFooter>
     </Card>
   );
 };
