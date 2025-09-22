@@ -154,6 +154,23 @@ export const PROTOCOLS: Protocol[] = [
     isActive: true
   },
   {
+    id: 'compound-v3',
+    name: 'Compound V3',
+    slug: 'compound',
+    logo: '/logos/compound.svg',
+    description: 'Advanced lending protocol with enhanced capital efficiency',
+    tvl: 8200000000,
+    apy: 5.33,
+    baseApy: 4.33,
+    rewardApy: 1.00,
+    risk: 'conservative',
+    chains: NETWORKS.filter(n => ['ethereum', 'arbitrum', 'polygon'].includes(n.slug)),
+    tokens: ['USDC', 'USDT'],
+    category: 'lending',
+    auditScore: 93,
+    isActive: true
+  },
+  {
     id: 'venus-protocol',
     name: 'Venus Protocol',
     slug: 'venus',

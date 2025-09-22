@@ -298,6 +298,7 @@ export const useStrategyStore = create<StrategyStore>()(
         name: 'yieldex-strategy-store',
         // Only persist user positions and selected strategy
         partialize: (state) => ({
+          strategies: state.strategies,
           userPositions: state.userPositions,
           selectedStrategy: state.selectedStrategy
         })

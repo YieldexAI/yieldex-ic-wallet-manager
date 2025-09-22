@@ -58,21 +58,21 @@ const generatePerformanceHistory = (baseApy: number, days: number = 30): Perform
 export const STRATEGIES: Strategy[] = [
   {
     id: 'single-aave',
-    name: 'Single AAVE',
-    description: 'Low-risk strategy focused on battle-tested AAVE V3 protocol with consistent returns',
+    name: 'OG Duo',
+    description: 'Low-risk strategy combining AAVE V3 + Compound V3 protocols for diversified, stable returns',
     risk: 'conservative',
     expectedApy: 5.32, // AAVE V3 APY
-    protocols: ['aave-v3'],
+    protocols: ['aave-v3', 'compound-v3'],
     supportedTokens: ['USDC', 'USDT', 'DAI'],
     isActive: true,
     totalDeposited: 25000000,
     performanceHistory: generatePerformanceHistory(5.32),
     features: [
-      'Battle-tested protocols',
-      'Consistent returns',
+      'AAVE V3 + Compound V3',
+      'Dual protocol diversification',
       'Low volatility',
       'Automatic rebalancing',
-      'Multi-chain diversification'
+      'Multi-chain coverage'
     ]
   },
   {
