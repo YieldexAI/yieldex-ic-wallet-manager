@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Clock,
@@ -39,10 +39,16 @@ const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
     getFilteredTransactions,
     activeFilter,
     setFilter,
-    clearFilter
+    clearFilter,
+    initializeWithDefaultActivity
   } = useTransactionStore();
 
   const recentActivity = useRecentActivity(limit);
+
+  // Initialize default activity if no transactions exist
+  useEffect(() => {
+    initializeWithDefaultActivity(positionId);
+  }, [initializeWithDefaultActivity, positionId]);
 
   // Get activity data based on positionId filter
   const activityData = positionId

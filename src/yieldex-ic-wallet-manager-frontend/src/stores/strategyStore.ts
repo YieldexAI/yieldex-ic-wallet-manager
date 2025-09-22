@@ -61,7 +61,12 @@ export const useStrategyStore = create<StrategyStore>()(
       (set, get) => ({
         // Initial state
         strategies: STRATEGIES,
-        userPositions: [], // Start with empty positions - real positions created by user only
+        userPositions: MOCK_USER_POSITIONS.map(pos => ({
+          ...pos,
+          realTimeValue: pos.currentValue,
+          realTimeEarnings: pos.totalEarnings,
+          updatedAt: new Date()
+        })), // Start with demo AAVE positions for demonstration
         selectedStrategy: null,
         isDepositing: false,
         isWithdrawing: false,

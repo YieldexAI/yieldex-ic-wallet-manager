@@ -115,72 +115,50 @@ export const STRATEGIES: Strategy[] = [
   }
 ];
 
-// Mock user positions for demo
+// Mock user positions for demo - AAVE focused since transactions are from AAVE
 export const MOCK_USER_POSITIONS: UserPosition[] = [
   {
     id: 'pos-1',
     strategyId: 'single-aave',
-    amount: 5000,
-    token: 'USDC',
+    amount: 4.74,
+    token: 'DAI',
     entryDate: '2024-01-15',
-    currentValue: 5463.62,
-    totalEarnings: 463.62,
+    currentValue: 4.74,
+    totalEarnings: 0.00,
     apy: 5.32,
     isActive: true
   },
   {
     id: 'pos-2',
-    strategyId: 'moderate-growth',
-    amount: 2500,
-    token: 'USDT',
+    strategyId: 'single-aave',
+    amount: 4.74,
+    token: 'DAI',
     entryDate: '2024-02-01',
-    currentValue: 2843.16,
-    totalEarnings: 343.16,
-    apy: 8.20,
+    currentValue: 4.74,
+    totalEarnings: 0.00,
+    apy: 5.32,
     isActive: true
   },
   {
     id: 'pos-3',
     strategyId: 'single-aave',
-    amount: 10300,
-    token: 'USDT',
+    amount: 31.49,
+    token: 'USDC',
     entryDate: '2024-01-10',
-    currentValue: 10301.15,
-    totalEarnings: 1.15,
-    apy: 5.32,
+    currentValue: 31.50,
+    totalEarnings: 0.01,
+    apy: 8.20,
     isActive: true
   },
   {
     id: 'pos-4',
-    strategyId: 'aggressive-defi',
-    amount: 27252.30,
+    strategyId: 'single-aave',
+    amount: 36.49,
     token: 'USDC',
     entryDate: '2024-03-01',
-    currentValue: 27264.56,
-    totalEarnings: 12.26,
-    apy: 22.17,
-    isActive: true
-  },
-  {
-    id: 'pos-5',
-    strategyId: 'moderate-growth',
-    amount: 27252.30,
-    token: 'USDC',
-    entryDate: '2024-03-15',
-    currentValue: 27256.54,
-    totalEarnings: 4.24,
-    apy: 8.20,
-    isActive: true
-  },
-  {
-    id: 'pos-6',
-    strategyId: 'moderate-growth',
-    amount: 27252.30,
-    token: 'USDC',
-    entryDate: '2024-04-01',
-    currentValue: 27252.30,
-    totalEarnings: 0,
-    apy: 8.20,
+    currentValue: 36.49,
+    totalEarnings: 0.00,
+    apy: 5.32,
     isActive: true
   }
 ];

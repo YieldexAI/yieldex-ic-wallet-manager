@@ -37,6 +37,7 @@ interface TransactionStore {
 
   // Utilities
   generateMockActivity: (positionId: string) => void;
+  initializeWithDefaultActivity: (positionId?: string) => void;
   getExplorerUrl: (network: NetworkType, txHash: string) => string;
   clearError: () => void;
 }
@@ -203,7 +204,7 @@ export const useTransactionStore = create<TransactionStore>()(
                 type: 'opportunity_detection',
                 status: 'completed',
                 timestamp: new Date(now - 15 * 60 * 1000).toISOString(),
-                description: 'Found better yield opportunity: Compound V3 (6.1% APY)',
+                description: 'Found better yield opportunity: AAVE V3 (6.1% APY)',
                 icon: '🎯',
                 color: 'text-blue-400',
                 blockchainRefs: []
@@ -233,7 +234,7 @@ export const useTransactionStore = create<TransactionStore>()(
                 timestamp: new Date(now - 10 * 60 * 1000).toISOString(),
                 amount: 4.50,
                 token: 'DAI',
-                description: 'Deposited to Compound V3',
+                description: 'Deposited to AAVE V3',
                 icon: '📥',
                 color: 'text-green-400',
                 blockchainRefs: [{
@@ -294,6 +295,117 @@ export const useTransactionStore = create<TransactionStore>()(
               explorerUrl: 'https://dashboard.internetcomputer.org/canister/rdmx6-jaaaa-aaaah-qdrqq-cai'
             }]
           });
+        },
+
+        initializeWithDefaultActivity: (positionId?: string) => {
+          const { transactions, addTransaction } = get();
+
+          // For position-specific initialization, check if position has transactions
+          if (positionId) {
+            const positionTransactions = transactions.filter(tx => tx.positionId === positionId);
+            if (positionTransactions.length === 0) {
+              // Add default transactions for this position
+              const now = Date.now();
+
+              // 1. Withdrawal transaction
+              addTransaction({
+                positionId,
+                type: 'withdrawal',
+                status: 'completed',
+                amount: 2.5,
+                token: 'USDC',
+                description: 'Withdrew funds from AAVE V3',
+                icon: '📤',
+                color: 'text-orange-400',
+                blockchainRefs: [{
+                  network: 'arbitrum',
+                  txHash: '0xeff881d08d16eafe4dad9a86b1ee3b0fec19eff1d59f5707dc821e44b15f702a',
+                  explorerUrl: 'https://arbiscan.io/tx/0xeff881d08d16eafe4dad9a86b1ee3b0fec19eff1d59f5707dc821e44b15f702a'
+                }]
+              });
+
+              // 2. Supply transaction (earlier than withdrawal)
+              addTransaction({
+                positionId,
+                type: 'deposit',
+                status: 'completed',
+                amount: 5.0,
+                token: 'USDC',
+                description: 'Supplied funds to AAVE V3',
+                icon: '📥',
+                color: 'text-green-400',
+                blockchainRefs: [{
+                  network: 'arbitrum',
+                  txHash: '0x951a0b18ebc1a918f22c6a8defbf26f4fba9b01941852e9a9613e709c1385653',
+                  explorerUrl: 'https://arbiscan.io/tx/0x951a0b18ebc1a918f22c6a8defbf26f4fba9b01941852e9a9613e709c1385653'
+                }]
+              });
+
+              // 3. Smart-wallet creation (earliest transaction)
+              addTransaction({
+                positionId,
+                type: 'smart_wallet_creation',
+                status: 'completed',
+                description: 'Smart-wallet generated via IC threshold ECDSA',
+                icon: '🏦',
+                color: 'text-purple-400',
+                blockchainRefs: [{
+                  network: 'arbitrum',
+                  explorerUrl: 'https://arbiscan.io/address/0x01e9ec708d2ccf81f2f0d5cc9a4f3321cd287145'
+                }]
+              });
+            }
+          } else {
+            // Global initialization - only add default transactions if store is empty
+            if (transactions.length === 0) {
+              const now = Date.now();
+
+              // 1. Withdrawal transaction
+              addTransaction({
+                type: 'withdrawal',
+                status: 'completed',
+                amount: 2.5,
+                token: 'USDC',
+                description: 'Withdrew funds from AAVE V3',
+                icon: '📤',
+                color: 'text-orange-400',
+                blockchainRefs: [{
+                  network: 'arbitrum',
+                  txHash: '0xeff881d08d16eafe4dad9a86b1ee3b0fec19eff1d59f5707dc821e44b15f702a',
+                  explorerUrl: 'https://arbiscan.io/tx/0xeff881d08d16eafe4dad9a86b1ee3b0fec19eff1d59f5707dc821e44b15f702a'
+                }]
+              });
+
+              // 2. Supply transaction (earlier than withdrawal)
+              addTransaction({
+                type: 'deposit',
+                status: 'completed',
+                amount: 5.0,
+                token: 'USDC',
+                description: 'Supplied funds to AAVE V3',
+                icon: '📥',
+                color: 'text-green-400',
+                blockchainRefs: [{
+                  network: 'arbitrum',
+                  txHash: '0x951a0b18ebc1a918f22c6a8defbf26f4fba9b01941852e9a9613e709c1385653',
+                  explorerUrl: 'https://arbiscan.io/tx/0x951a0b18ebc1a918f22c6a8defbf26f4fba9b01941852e9a9613e709c1385653'
+                }]
+              });
+
+              // 3. Smart-wallet creation (earliest transaction)
+              addTransaction({
+                type: 'smart_wallet_creation',
+                status: 'completed',
+                description: 'Smart-wallet generated via IC threshold ECDSA',
+                icon: '🏦',
+                color: 'text-purple-400',
+                blockchainRefs: [{
+                  network: 'arbitrum',
+                  explorerUrl: 'https://arbiscan.io/address/0x01e9ec708d2ccf81f2f0d5cc9a4f3321cd287145'
+                }]
+              });
+            }
+          }
         },
 
         getExplorerUrl: (network, txHash) => {

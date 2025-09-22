@@ -401,81 +401,124 @@ const PositionCard: React.FC<{
   isWithdrawing
 }) => {
 
-  return (
-    <Card
-      variant="glass"
-      className="hover:bg-gray-800/50 transition-colors"
-    >
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle size="md" className="flex items-center space-x-2">
-            <Target className="w-5 h-5 text-primary-400" />
-            <span>{strategy?.name || 'Unknown Strategy'}</span>
-          </CardTitle>
+  const getStrategyIcon = () => {
+    // Use the same icons as in StrategyCard based on risk level
+    if (strategy?.risk === 'conservative') return <Target className="w-5 h-5" />;
+    if (strategy?.risk === 'moderate') return <TrendingUp className="w-5 h-5" />;
+    if (strategy?.risk === 'aggressive') return <Activity className="w-5 h-5" />;
+    return <Target className="w-5 h-5" />;
+  };
 
-          <div className="flex items-center space-x-2">
+  const getRiskColor = () => {
+    if (strategy?.risk === 'conservative') return 'bg-green-500/20 text-green-400 border-green-500/30';
+    if (strategy?.risk === 'moderate') return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+    if (strategy?.risk === 'aggressive') return 'bg-red-500/20 text-red-400 border-red-500/30';
+    return 'bg-primary-500/20 text-primary-400 border-primary-500/30';
+  };
+
+  return (
+    <motion.div
+      variants={cardVariants}
+      initial="initial"
+      animate="animate"
+      whileHover="hover"
+      className="h-full"
+    >
+      <Card
+        variant="glass"
+        className="h-full transition-all duration-300 cursor-pointer hover:shadow-xl hover:shadow-primary-500/10"
+        onClick={() => onManage()}
+      >
+        <CardHeader>
+          <div className="flex items-center justify-between gap-6">
+            <CardTitle size="lg" className="flex items-center space-x-2">
+              <div className={clsx('p-2 rounded-lg', getRiskColor())}>
+                {getStrategyIcon()}
+              </div>
+              <span>{strategy?.name || 'Strategy Position'}</span>
+              <div className="px-2 py-1 bg-gray-700/50 rounded-full text-xs font-medium text-gray-300">
+                {position.token}
+              </div>
+            </CardTitle>
+
             <div className="text-right">
               <motion.div
                 key={position.realTimeValue}
                 variants={counterVariants}
                 initial="initial"
                 animate="animate"
-                className="text-lg font-bold text-white"
+                className="text-2xl font-bold text-primary-400"
               >
-                {formatCurrency(position.realTimeValue)}
+                {formatAPY(position.apy)}
               </motion.div>
-              <div className={clsx(
-                'text-sm font-medium',
-                isPositive ? 'text-green-400' : 'text-red-400'
-              )}>
-                {isPositive ? '+' : ''}{formatCurrency(earnings)} ({earningsPercentage.toFixed(2)}%)
+              <div className="text-xs text-gray-400">Current APY</div>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <div className="space-y-4">
+            {/* Position Summary */}
+            <p className="text-sm text-gray-400 leading-relaxed">
+              Initial: {formatCurrency(position.amount)} • Current: {formatCurrency(position.realTimeValue)} • APY: {formatAPY(position.apy)}
+            </p>
+
+            {/* Status Badge */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  <span className="px-2 py-1 rounded-full text-xs font-medium border bg-green-500/20 text-green-400 border-green-500/30">
+                    Active
+                  </span>
+                </div>
+              </div>
+              <div className="text-sm text-gray-400">
+                {formatTimeAgo(position.entryDate)}
+              </div>
+            </div>
+
+            {/* Position Stats */}
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-700/50">
+              <div className="text-center">
+                <motion.div
+                  key={position.realTimeValue}
+                  variants={counterVariants}
+                  initial="initial"
+                  animate="animate"
+                  className="text-lg font-semibold text-white"
+                >
+                  {formatCurrency(position.realTimeValue)}
+                </motion.div>
+                <div className="text-xs text-gray-400">Current Value</div>
+              </div>
+              <div className="text-center">
+                <div className={clsx(
+                  'text-lg font-semibold',
+                  isPositive ? 'text-green-400' : 'text-red-400'
+                )}>
+                  {isPositive ? '+' : ''}{formatCurrency(earnings)}
+                </div>
+                <div className="text-xs text-gray-400">
+                  {isPositive ? '+' : ''}{earningsPercentage.toFixed(2)}%
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </CardHeader>
+        </CardContent>
 
-      <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div>
-            <p className="text-gray-400 mb-1">Initial Deposit</p>
-            <p className="text-white font-medium">
-              {formatCurrency(position.amount)} {position.token}
-            </p>
-          </div>
-          <div>
-            <p className="text-gray-400 mb-1">APY</p>
-            <p className="text-primary-400 font-medium">
-              {formatAPY(position.apy)}
-            </p>
-          </div>
-          <div>
-            <p className="text-gray-400 mb-1">Duration</p>
-            <p className="text-white font-medium">
-              {formatTimeAgo(position.entryDate)}
-            </p>
-          </div>
-          <div>
-            <p className="text-gray-400 mb-1">Status</p>
-            <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-green-400 font-medium">Active</span>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-
-      <CardFooter>
-        <QuickActionButtons
-          positionId={position.id}
-          onAddMore={onAddMore}
-          onWithdraw={onWithdraw}
-          onWithdrawAll={onWithdrawAll}
-          onManage={onManage}
-          isWithdrawing={isWithdrawing}
-        />
-      </CardFooter>
-    </Card>
+        <CardFooter>
+          <QuickActionButtons
+            positionId={position.id}
+            onAddMore={onAddMore}
+            onWithdraw={onWithdraw}
+            onWithdrawAll={onWithdrawAll}
+            onManage={onManage}
+            isWithdrawing={isWithdrawing}
+          />
+        </CardFooter>
+      </Card>
+    </motion.div>
   );
 };
 
