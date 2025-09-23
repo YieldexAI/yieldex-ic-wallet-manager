@@ -1,12 +1,15 @@
-# 🌟 Yieldex IC Wallet Manager - Demo Frontend
+# 🌟 Yieldex IC Wallet Manager - Frontend
 
-A modern React-based demo interface for the Yieldex IC Wallet Manager, showcasing cross-chain DeFi yield strategies powered by Internet Computer's Threshold ECDSA technology.
+A production-ready React-based **B2B demonstration interface** for wallet providers and consumer apps. Showcases real-time stablecoin portfolio management, cross-chain DeFi yield strategies, and live balance tracking powered by Internet Computer's Threshold ECDSA technology.
+
+**🌐 Live Demo**: [https://app.yieldex.xyz/](https://app.yieldex.xyz/) - Experience the full B2B integration capabilities
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+
 - npm or yarn
+- Running IC local replica (for backend integration)
 
 ### Installation
 
@@ -16,7 +19,7 @@ npm install
 
 # Setup environment variables
 cp .env.example .env
-# Edit .env and add your WalletConnect Project ID
+# Edit .env and configure your settings
 
 # Start development server
 npm run dev
@@ -28,64 +31,83 @@ npm run build
 npm run preview
 ```
 
-### WalletConnect Setup
+### Environment Configuration
 
-1. **Get Project ID:**
-   - Go to [WalletConnect Cloud](https://cloud.walletconnect.com/)
-   - Create a free account and new project
-   - Copy your Project ID
+```bash
+# .env file configuration
+VITE_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id
+VITE_IC_CANISTER_ID=lla3p-uyaaa-aaaap-an2ea-cai
+VITE_NETWORK_RPC_URLS=your_rpc_endpoints
+VITE_DEMO_MODE=false  # Set to true for demo mode
+```
 
-2. **Configure Environment:**
-   ```bash
-   # In your .env file
-   VITE_WALLETCONNECT_PROJECT_ID=your_actual_project_id_here
-   ```
+### Wallet Integration
 
-3. **Supported Wallets:**
+1. **WalletConnect Setup:**
+   - Get Project ID from [WalletConnect Cloud](https://cloud.walletconnect.com/)
+   - Add to your `.env` file
+
+2. **Supported Wallets:**
    - MetaMask (browser extension)
    - WalletConnect compatible mobile wallets
    - Coinbase Wallet
    - Any injected EVM wallet
 
-## 🎯 Demo Features
+## 🎯 Production Features
 
 ### 🔐 Wallet Integration
-- **Mock WalletConnect** - Simulated wallet connection experience
-- **IC Threshold ECDSA** - EVM address generation demo
-- **Multi-Network Support** - Ethereum, Arbitrum, Polygon, BSC
+- **Real Wallet Connection** - MetaMask, WalletConnect, and injected wallets
+- **IC Threshold ECDSA** - Keyless EVM address generation
+- **Multi-Network Support** - Ethereum Sepolia, Arbitrum One, Base, BSC
 
-### 💰 DeFi Strategies (Coming Soon)
-- **Conservative Strategy** (5-6% APY): AAVE V3, Compound III, Venus
-- **Moderate Strategy** (7-9% APY): Enhanced protocols with higher yields  
-- **Aggressive Strategy** (15-25% APY): Morpho, Euler, cutting-edge protocols
+### 💰 Live Stablecoin Portfolio
+- **Real Balance Tracking** - Fetches actual wallet balances from blockchain
+- **Multi-Stablecoin Support**:
+  - **USDC** - USD Coin on Arbitrum & Base networks
+  - **USDT** - Tether USD on multiple networks
+  - **USDe** - Ethena stablecoin integration
+  - **DAI** - MakerDAO stablecoin support
+- **Auto-Refresh** - Real-time balance updates every 30 seconds
 
 ### 📊 Real-Time Features
-- **Live Balance Simulation** - Watch your investments grow
-- **Cross-Protocol Rebalancing** - Automated yield optimization
-- **Multi-Chain Portfolio** - Aggregate view across networks
+- **Live Portfolio Value** - Real USD valuations from price feeds
+- **Network-Specific Balances** - Per-network stablecoin distributions
+- **Yield Opportunities** - "Start Earn" buttons for DeFi protocol integration
+- **Transaction History** - Complete audit trail of all operations
 
 ## 🛠️ Technology Stack
 
 - **React 18** + **TypeScript** - Modern React with full type safety
 - **Framer Motion** - Smooth animations and transitions
 - **Tailwind CSS** - Utility-first styling with Web3 design system
-- **Zustand** - Lightweight state management
+- **Zustand** - Lightweight state management for wallet and portfolio state
 - **Vite** - Fast build tool and dev server
+- **Wagmi + Viem** - Type-safe Ethereum interaction libraries
+- **TanStack Query** - Powerful data fetching and caching
+- **React Hook Form** - Performant form handling
+- **Alchemy SDK** - Enhanced blockchain data APIs
 
 ## 📁 Project Structure
 
 ```
 src/
 ├── components/
-│   ├── Dashboard/       # Portfolio and analytics
-│   ├── Strategies/      # Yield strategy selection
+│   ├── Dashboard/       # Real-time portfolio analytics
+│   ├── Strategies/      # DeFi yield strategy management
+│   ├── Stablecoins/     # Stablecoin portfolio components
 │   ├── Wallet/          # Wallet connection & management
-│   └── UI/             # Reusable UI components
-├── hooks/              # Custom React hooks
-├── mock/               # Demo data and API simulation
+│   ├── Navigation/      # App navigation and routing
+│   ├── Layout/          # Page layouts and structure
+│   └── UI/             # Reusable UI components & design system
+├── contexts/           # React contexts (Toast notifications)
 ├── stores/             # Zustand state stores
-├── styles/             # Global styles and themes
-└── utils/              # Helper functions and utilities
+│   ├── walletStore.ts  # Wallet connection and address state
+│   ├── transactionStore.ts # Transaction history and status
+│   └── strategyStore.ts # DeFi strategy state management
+├── types/              # TypeScript type definitions
+├── utils/              # Helper functions and utilities
+├── styles/             # Global styles and Tailwind config
+└── mock/               # Development mock data
 ```
 
 ## 🎨 Design System
@@ -112,43 +134,73 @@ src/
 
 ### Environment Variables
 ```env
-# Demo mode (no real transactions)
-VITE_DEMO_MODE=true
+# Production/Demo mode toggle
+VITE_DEMO_MODE=false  # false for live blockchain data
 
-# API endpoints (mocked)
+# IC Canister configuration
 VITE_IC_CANISTER_ID=lla3p-uyaaa-aaaap-an2ea-cai
-VITE_NETWORK_RPC_URLS=...
+
+# WalletConnect configuration
+VITE_WALLETCONNECT_PROJECT_ID=your_project_id
+
+# RPC endpoints for multi-chain support
+VITE_ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc
+VITE_BASE_RPC_URL=https://mainnet.base.org
+VITE_ETHEREUM_RPC_URL=https://eth-mainnet.alchemyapi.io/v2/your-key
 ```
 
 ### Customization
+- **Networks**: Add new chains in `utils/networks.ts`
+- **Tokens**: Configure stablecoins in `mock/walletData.ts`
 - **Themes**: Modify `tailwind.config.js` for custom color schemes
-- **Animations**: Adjust timing in `utils/animations.ts`
-- **Mock Data**: Update `mock/` files for different demo scenarios
+- **Portfolio Layout**: Update components in `components/Stablecoins/`
 
-## 🎮 Demo Flow
+## 🎮 User Flow
 
-1. **Landing** - Connect wallet simulation
-2. **Network Selection** - Choose EVM network  
-3. **Address Generation** - IC Threshold ECDSA demo
-4. **Strategy Selection** - Choose yield strategy (coming soon)
-5. **Portfolio Management** - Real-time balance tracking (coming soon)
+1. **Wallet Connection** - Connect MetaMask or WalletConnect wallet
+2. **Address Generation** - Generate IC-derived EVM address
+3. **Portfolio Loading** - Real-time balance fetching from blockchain
+4. **Stablecoin Management** - View and manage multi-chain stablecoins
+5. **Yield Strategies** - Access DeFi earning opportunities
+6. **Transaction Tracking** - Monitor all wallet activities
 
-## 🔒 Security Notes
 
-- **Demo Only** - No real transactions or private keys
-- **Simulated Data** - All balances and yields are mocked
-- **Safe Testing** - Perfect for demonstrations and screenshots
+## 🏢 B2B Integration Showcase
+
+This frontend demonstrates how wallet providers and consumer apps can integrate Yieldex's DeFi capabilities:
+
+### 🎯 **For Wallet Providers**
+```typescript
+// Example: Integrate yield opportunities in wallet UI
+import { YieldexSDK } from '@yieldex/sdk';
+
+const yieldex = new YieldexSDK({
+  partnerId: 'your-wallet-id',
+  canisterId: 'lla3p-uyaaa-aaaap-an2ea-cai'
+});
+
+// Get user's yield opportunities
+const opportunities = await yieldex.getYieldOpportunities(userAddress);
+```
+
+### 📱 **For Consumer Apps**
+- **White-label components** - Embed portfolio widgets directly
+- **API integration** - RESTful endpoints for custom implementations
+- **Real-time updates** - WebSocket connections for live data
+- **Custom branding** - Fully customizable UI components
+
+### 🔧 **Integration Benefits**
+- 🚀 **Rapid deployment** - 2-week integration timeline
+- 🛡️ **Enterprise security** - IC threshold cryptography
+- 📊 **Analytics dashboard** - Partner performance metrics
+- 💰 **Revenue sharing** - Competitive partnership terms
 
 ## 🤝 Contributing
 
-This is a demo interface for showcase purposes. For the actual protocol implementation, see the main Rust canister code.
-
-## 📄 License
-
-Part of the Yieldex Protocol ecosystem. See main project for license details.
+This frontend demonstrates B2B integration capabilities for wallet providers and consumer apps.
 
 ---
 
 **🌟 Built with ❤️ on Internet Computer**
 
-*Making DeFi accessible, secure, and profitable for everyone*
+*Empowering wallet providers and consumer apps with institutional-grade DeFi infrastructure*

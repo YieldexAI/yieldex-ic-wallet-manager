@@ -11,7 +11,7 @@
 
 *Revolutionizing DeFi with AI-powered cross-chain yield optimization through Internet Computer's ChainFusion technology*
 
-[🚀 **Live Demo**](https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=lla3p-uyaaa-aaaap-an2ea-cai) • [🧪 **Try It Now**](https://github.com/YieldexAI/yieldex-ic-wallet-manager?tab=readme-ov-file#-quick-start-guide)
+[🚀 **Live Demo**](https://app.yieldex.xyz/) • [⚙️ **IC Canister**](https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=lla3p-uyaaa-aaaap-an2ea-cai) • [📖 **Documentation**](./CLAUDE.md)
 
 </div>
 
@@ -19,7 +19,10 @@
 
 ## 🎯 **What is Yieldex?**
 
-Yieldex IC Wallet Manager is a **groundbreaking Rust-based Internet Computer canister** that brings institutional-grade DeFi operations to everyone. Built on IC's revolutionary **ChainFusion** technology, it enables seamless cross-chain interactions without bridges, private key management, or centralized intermediaries.
+Yieldex IC Wallet Manager is a **full-stack DeFi platform** combining a Rust-based Internet Computer canister backend with a modern React frontend. Built on IC's revolutionary **ChainFusion** technology, it enables seamless cross-chain stablecoin portfolio management and yield optimization without bridges, private key management, or centralized intermediaries.
+
+**🖥️ Live Demo**: [https://app.yieldex.xyz/](https://app.yieldex.xyz/) - Real-time multi-chain stablecoin portfolio
+**⚙️ Backend Canister**: [IC Network](https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=lla3p-uyaaa-aaaap-an2ea-cai) - Production DeFi operations
 
 ### 🌈 **Why Yieldex?**
 
@@ -42,18 +45,12 @@ Yieldex IC Wallet Manager is a **groundbreaking Rust-based Internet Computer can
 - 🛡️ **Advanced Permissions System** - Granular control over protocols and token operations
 - 📈 **Real-Time Portfolio Tracking** - Monitor all your DeFi positions in one place
 
-### 💰 **Multi-Token Universe**
-
-- **ETH** - Native Ethereum support with optimized gas management
-- **USDC** - Stablecoin operations with 6-decimal precision
-- **LINK** - Chainlink token integration for oracle-powered DeFi
-- **WETH** - Wrapped ETH for DeFi protocol compatibility
 
 ### 🏛️ **DeFi Protocol Integration**
 
 - 🏪 **AAVE V3** - Supply, withdraw, and earn yield on Sepolia testnet ✅ **LIVE**
 - 🏗️ **Compound III** - Supply and withdraw USDC on Arbitrum One mainnet ✅ **LIVE**
-- 🔄 **Cross-Protocol Rebalancing** - Automated token migration between AAVE and Compound ✅ **LIVE**
+- 🔄 **Cross-Protocol Rebalancing** - Automated token migration between AAVE and Compound *(coming soon)*
 - 🦄 **Uniswap V3** - Automated market making and token swaps *(coming soon)*
 
 ### 🔐 **Enterprise-Grade Security**
@@ -67,24 +64,128 @@ Yieldex IC Wallet Manager is a **groundbreaking Rust-based Internet Computer can
 
 ## 🏗️ **Technical Architecture**
 
-```mermaid
-graph TB
-    A["User Principal"] --> B["IC Threshold ECDSA"]
-    B --> C["EVM Address Generation"]
-    C --> D["ChainFusion Bridge"]
-    D --> E["Ethereum Sepolia"]
-  
-    E --> F["AAVE V3 Pool"]
-    E --> G["Uniswap V3"]
-    E --> H["Token Contracts"]
-  
-    I["AI Yield Optimizer"] --> J["Strategy Engine"]
-    J --> F
-    J --> G
-  
-    K["Portfolio Manager"] --> L["Risk Assessment"]
-    L --> M["Rebalancing Engine"]
+### 🌐 **Yieldex B2B Architecture for Wallets & Consumer Apps**
+
 ```
+                                   ┌──────────┐                                        ┌──────────┐                          ┌─────────────┐
+                                   │ Partner  │                                        │ Yieldex  │                          │EVM Networks │
+                                   │ Wallet/  │                                        │ Canister │                          │Multi-Chain  │
+       User via                    │Consumer  │                                        │(B2B API) │                          │DeFi Protocols│
+       Partner App                 │   App    │                                        └────┬─────┘                          └──────┬──────┘
+        │     EVM Wallet Login          ┌┴┐                                                 │                                       │
+        │ ─────────────────────────────>│ │                                                 │                                       │
+        │                               │ │────┐                                            │                                       │
+        │                               │ │    │ Integrate Yieldex                          │                                       │
+        │                               │ │    │ DeFi SDK/API                               │                                       │
+        │                               │ │<───┘                                            │                                       │
+        │                               │ │                                                 │                                       │
+        │                               │ │         partner_generate_address()         ┌┴┐                                          │
+        │                               │ │ ──────────────────────────────────────────>│ │                                          │
+        │                               │ │                                            │ │────┐                                     │
+        │                               │ │                                            │ │    │ B2B Principal Mapping               │
+        │                               │ │                                            │ │    │ + IC Threshold ECDSA                │
+        │                               │ │                                            │ │<───┘ Address Generation                  │
+        │                               │ │                                            └┬┘                                          │
+        │                               │ │          OK, partner_evm_address            │                                           │
+        │                               │ │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─                                              │
+        │                               │ │                                             │                                           │
+        │                               │ │      partner_get_portfolio_data()        ┌┴┐                                            │
+        │                               │ │ ──────────────────────────────────────────>│ │                                          │
+        │                               │ │                                            │ │       Multi-Chain RPC Calls             ┌┴┐
+        │                               │ │                                            │ │ ───────────────────────────────────────>│ │
+        │                               │ │                                            │ │                                         │ │
+        │                               │ │                                            │ │         Real Balances + Yields          │ │
+        │                               │ │                                            │ │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│ │
+        │                               │ │                                            └┬┘                                         └┬┘
+        │                               │ │    OK, standardized_portfolio_data          │                                           │
+        │                               │ │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─                                              │
+        │                               │ │                                             │                                           │
+        │                               │ │   partner_execute_defi_strategy()        ┌┴┐                                            │
+        │                               │ │ ──────────────────────────────────────────>│ │                                          │
+        │                               │ │                                            │ │────┐                                     │
+        │                               │ │                                            │ │    │ B2B Permissions +                   │
+        │                               │ │                                            │ │    │ Strategy Validation                 │
+        │                               │ │                                            │ │<───┘                                     │
+        │                               │ │                                            │ │                                          │
+        │                               │ │                                            │ │    Execute DeFi Operations              ┌┴┐
+        │                               │ │                                            │ │ ───────────────────────────────────────>│ │
+        │                               │ │                                            │ │                                         │ │
+        │                               │ │                                            │ │    Multi-Protocol Execution             │ │
+        │                               │ │                                            │ │    (AAVE, Compound, Uniswap)            │ │
+        │                               │ │                                            │ │ ───────────────────────────────────────>│ │
+        │                               │ │                                            │ │                                         │ │
+        │                               │ │                                            │ │        Transaction Results              │ │
+        │                               │ │                                            │ │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│ │
+        │                               │ │                                            └┬┘                                         └┬┘
+        │                               │ │      Success, standardized_response         │                                           │
+        │                               │ │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─                                              │
+        │                               │ │                                             │                                           │
+        │                               │ │   partner_auto_rebalance_portfolio()     ┌┴┐                                            │
+        │                               │ │ ──────────────────────────────────────────>│ │                                          │
+        │                               │ │                                            │ │────┐                                     │
+        │                               │ │                                            │ │    │ AI-Powered Cross-Protocol           │
+        │                               │ │                                            │ │    │ Optimization Algorithm              │
+        │                               │ │                                            │ │<───┘                                     │
+        │                               │ │                                            │ │                                          │
+        │                               │ │                                            │ │    Atomic Multi-Step Execution          ┌┴┐
+        │                               │ │                                            │ │ ───────────────────────────────────────>│ │
+        │                               │ │                                            │ │                                         │ │
+        │                               │ │                                            │ │    Cross-Protocol Rebalancing           │ │
+        │                               │ │                                            │ │    (Withdraw + Supply + Optimize)       │ │
+        │                               │ │                                            │ │ ───────────────────────────────────────>│ │
+        │                               │ │                                            │ │                                         │ │
+        │                               │ │                                            │ │         Optimized Results               │ │
+        │                               │ │                                            │ │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│ │
+        │                               │ │                                            └┬┘                                         └┬┘
+        │                               │ │    Success, optimized_portfolio_state       │                                           │
+        │                               │ │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │                                           │
+        │                               └┬┘                                             │                                           │ 
+        │  Enhanced DeFi experience      │                                              │                                           │
+        │  via Partner App integration   │                                              │                                           │
+        │ <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─                                                │                                           │
+      User via                     ┌────┴─────┐                                   ┌─────┴────┐                          ┌───────────┴────┐
+      Partner App                  │ Partner  │                                   │ Yieldex  │                          │EVM Networks    │
+                                   │ Wallet/  │                                   │ Canister │                          │Multi-Chain     │
+                                   │Consumer  │                                   │(B2B API) │                          │DeFi Protocols  │
+                                   │   App    │                                   └──────────┘                          └────────────────┘
+                                   └──────────┘
+```
+
+### 🔧 **B2B Component Overview**
+
+**Partner Applications (Wallets & Consumer Apps)**
+- 🔗 EVM wallet login integration
+- 📱 Native DeFi features via Yieldex SDK
+- 🎯 White-label yield strategy embedding
+- 📊 Seamless portfolio integration in existing UI
+
+**Yieldex IC Canister (B2B API)**
+- 🔐 Partner-specific principal mapping
+- 🌐 Standardized multi-chain API responses
+- 🏦 Protocol-agnostic DeFi integrations
+- 🛡️ B2B permissions & compliance framework
+- 🤖 AI-powered portfolio optimization
+- ⚡ Atomic cross-protocol transactions
+
+**Multi-Chain DeFi Protocols**
+- **Ethereum Sepolia**: AAVE V3, development testing
+- **Arbitrum One**: Compound III, native USDC yields
+- **Base**: Growing stablecoin ecosystem
+- **Future**: Polygon, Optimism, and emerging L2s
+
+### 🏢 **B2B Integration Benefits**
+
+**For Wallet Providers:**
+- 💰 Additional revenue streams through DeFi yields
+- 🔒 Enhanced security via IC threshold cryptography
+- 📈 Increased user engagement and retention
+- 🛠️ Easy API integration, no complex DeFi infrastructure
+
+**For Consumer Apps:**
+- 🎯 Add DeFi features without regulatory complexity
+- 🚀 Fast time-to-market with proven protocols
+- 📊 Real-time portfolio analytics out-of-the-box
+- 🔧 Customizable user experience and branding
 
 <details>
 <summary>📁 <strong>Project Structure</strong></summary>
@@ -92,25 +193,34 @@ graph TB
 ```
 yieldex-ic-wallet-manager/
 ├── 🚀 src/
-│   └── yieldex-ic-wallet-manager-backend/
+│   ├── yieldex-ic-wallet-manager-backend/     # Rust IC Canister
+│   │   ├── src/
+│   │   │   ├── 🛠️ services/                  # Modular service architecture
+│   │   │   │   ├── 🏦 aave.rs                # AAVE V3 integration
+│   │   │   │   ├── 🏗️ compound.rs           # Compound III integration
+│   │   │   │   ├── 🔄 rebalance.rs           # Cross-protocol rebalancing
+│   │   │   │   ├── 💰 get_balance_*.rs       # Multi-token balance checking
+│   │   │   │   ├── 📤 transfer_*.rs          # Token transfer operations
+│   │   │   │   ├── ✅ approve_*.rs           # Token approval management
+│   │   │   │   ├── 🔐 permissions.rs         # Access control system
+│   │   │   │   └── 🌐 rpc_service.rs         # Multi-chain RPC management
+│   │   │   ├── 📄 abi/                       # Smart contract ABIs
+│   │   │   └── 🧠 lib.rs                     # Core canister logic
+│   │   └── ⚙️ Cargo.toml
+│   └── yieldex-ic-wallet-manager-frontend/    # React Frontend
 │       ├── src/
-│       │   ├── 🛠️ services/                  # Modular service architecture
-│       │   │   ├── 🏦 aave.rs                # AAVE V3 integration
-│       │   │   ├── 💰 get_balance_*.rs       # Multi-token balance checking
-│       │   │   ├── 📤 transfer_*.rs          # Token transfer operations
-│       │   │   ├── ✅ approve_*.rs           # Token approval management
-│       │   │   ├── 🔄 wrap_eth.rs            # ETH/WETH wrapping
-│       │   │   ├── ✍️ sign_message.rs        # Message signing utilities
-│       │   │   └── 🔐 permissions.rs         # Access control system
-│       │   ├── 📄 abi/                       # Smart contract ABIs
-│       │   │   ├── AAVE_Pool.json
-│       │   │   ├── LINK.json
-│       │   │   ├── USDC.json
-│       │   │   └── WETH.json
-│       │   └── 🧠 lib.rs                     # Core canister logic
-│       └── ⚙️ Cargo.toml
+│       │   ├── 📊 components/                # UI components
+│       │   │   ├── Dashboard/                # Portfolio analytics
+│       │   │   ├── Stablecoins/              # Stablecoin portfolio
+│       │   │   ├── Wallet/                   # Wallet connection
+│       │   │   └── UI/                       # Design system
+│       │   ├── 🔧 stores/                    # State management
+│       │   ├── 🎯 types/                     # TypeScript definitions
+│       │   └── 🛠️ utils/                     # Helper functions
+│       ├── 📋 package.json                   # Dependencies
+│       └── ⚙️ vite.config.ts                # Build configuration
 ├── 🧪 tests/                                 # Comprehensive test suite
-├── 📚 project_docs/                          # Technical documentation
+├── 📚 CLAUDE.md                              # Development guide
 └── 🔧 dfx.json                              # IC deployment config
 ```
 
@@ -135,31 +245,49 @@ sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 # Follow: https://github.com/dfinity/ic/tree/master/packages/pocket-ic
 ```
 
-### ⚡ **Lightning-Fast Setup**
+### ⚡ **Full-Stack Setup**
 
 ```bash
-# 1️⃣ Clone the revolutionary codebase
+# 1️⃣ Clone the repository
 git clone https://github.com/your-org/yieldex-ic-wallet-manager.git
 cd yieldex-ic-wallet-manager
 
-# 2️⃣ Fire up the IC local replica
-dfx start --background
+# 2️⃣ Backend Setup (IC Canister)
+dfx start --background          # Start IC local replica
+dfx build                       # Build Rust canister
+dfx deploy                      # Deploy canister locally
 
-# 3️⃣ Build the cutting-edge canister
-dfx build
+# 3️⃣ Frontend Setup (React App)
+cd src/yieldex-ic-wallet-manager-frontend
+npm install                     # Install dependencies
+cp .env.example .env           # Configure environment
+npm run dev                    # Start development server at http://localhost:3000
 
-# 4️⃣ Deploy locally for testing
-dfx deploy
-
-# 🎉 Ready to revolutionize DeFi!
+# 🎉 Full-stack DeFi platform ready!
 ```
 
-### 🌐 **Deploy to IC Mainnet**
+### 🌐 **Production Deployment**
 
 ```bash
-# Deploy to the decentralized cloud
+# Backend: Deploy to IC Mainnet
 dfx deploy --network ic
+
+# Frontend: Build for production
+cd src/yieldex-ic-wallet-manager-frontend
+npm run build
+npm run preview                # Preview production build
 ```
+
+### 📱 **Frontend Features**
+
+The React frontend provides a modern interface for interacting with the IC canister:
+
+- **🔗 Real Wallet Integration** - MetaMask, WalletConnect support
+- **📊 Live Stablecoin Portfolio** - Real-time balance tracking across chains
+- **🌐 Multi-Chain Support** - Arbitrum, Base, Ethereum networks
+- **💰 Yield Opportunities** - Direct integration with DeFi protocols
+- **📱 Responsive Design** - Mobile-first with glassmorphism UI
+- **⚡ Fast Performance** - Vite build system with TypeScript
 
 ---
 
