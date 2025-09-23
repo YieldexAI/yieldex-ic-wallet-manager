@@ -17,4 +17,17 @@ export default defineConfig({
   define: {
     global: 'globalThis',
   },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          alchemy: ['alchemy-sdk'],
+          wagmi: ['wagmi', 'viem'],
+          ui: ['@headlessui/react', 'framer-motion', 'lucide-react'],
+        },
+      },
+    },
+  },
 })

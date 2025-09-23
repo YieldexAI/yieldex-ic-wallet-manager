@@ -1,0 +1,6 @@
+[build]
+  command = "npm --workspace yieldex-ic-wallet-manager-frontend run build"
+  publish = "src/yieldex-ic-wallet-manager-frontend/dist"
+
+[build.environment]
+  SECRETS_SCAN_ENABLED = "false"
