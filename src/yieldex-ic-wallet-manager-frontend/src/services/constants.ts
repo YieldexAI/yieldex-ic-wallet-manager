@@ -53,6 +53,9 @@ export const STABLECOINS: Record<string, StablecoinConfig> = {
       polygon: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
       base: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
       bnb: '0x55d398326f99059fF775485246999027B3197955'
+    },
+    decimalsPerNetwork: {
+      bnb: 18
     }
   },
   USDC: {

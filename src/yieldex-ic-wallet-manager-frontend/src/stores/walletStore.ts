@@ -351,18 +351,23 @@ export const useWalletConnection = () => useWalletStore(state => ({
   clearError: state.clearError
 }));
 
-export const useWalletBalances = () => useWalletStore(state => ({
-  balances: state.balances,
-  totalPortfolioValue: state.totalPortfolioValue,
-  refreshBalances: state.refreshBalances,
-  getTokenBalance: state.getTokenBalance,
-  getNetworkValue: state.getNetworkValue,
-  // Include real balance state for loading and error handling
-  stablecoinBalances: state.stablecoinBalances,
-  isLoadingBalances: state.isLoadingBalances,
-  balancesError: state.balancesError,
-  fetchRealBalances: state.fetchRealBalances
-}));
+export const useWalletBalances = () => useWalletStore(state => {
+  // Calculate real portfolio value from stablecoin balances
+  const realPortfolioValue = state.portfolioSummary?.totalUsdValue || 0;
+
+  return {
+    balances: state.balances,
+    totalPortfolioValue: realPortfolioValue > 0 ? realPortfolioValue : state.totalPortfolioValue,
+    refreshBalances: state.refreshBalances,
+    getTokenBalance: state.getTokenBalance,
+    getNetworkValue: state.getNetworkValue,
+    // Include real balance state for loading and error handling
+    stablecoinBalances: state.stablecoinBalances,
+    isLoadingBalances: state.isLoadingBalances,
+    balancesError: state.balancesError,
+    fetchRealBalances: state.fetchRealBalances
+  };
+});
 
 export const useWalletNetwork = () => useWalletStore(state => ({
   networkId: state.networkId,
