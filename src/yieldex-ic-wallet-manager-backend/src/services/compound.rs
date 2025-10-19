@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use alloy::{
     network::EthereumWallet,
     primitives::{Address, U256},
-    providers::ProviderBuilder,
+    providers::{Provider, ProviderBuilder},
     signers::Signer,
     sol,
     transports::icp::IcpConfig,
@@ -120,22 +120,21 @@ pub async fn supply_usdc_to_compound_with_permissions(
         .with_gas_estimation()
         .wallet(wallet)
         .on_icp(config);
-    
-    // Get current nonce
-    let nonce = COMPOUND_NONCE.with(|n| {
-        let mut nonce_ref = n.borrow_mut();
-        match *nonce_ref {
-            Some(current) => {
-                *nonce_ref = Some(current + 1);
-                current + 1
-            }
-            None => {
-                let new_nonce = 0;
-                *nonce_ref = Some(new_nonce);
-                new_nonce
-            }
-        }
+
+    // Handle nonce management (same pattern as AAVE)
+    let maybe_nonce = COMPOUND_NONCE.with_borrow(|maybe_nonce| {
+        maybe_nonce.map(|nonce| nonce + 1)
     });
+
+    let nonce = if let Some(nonce) = maybe_nonce {
+        ic_cdk::println!("Using cached nonce: {}", nonce);
+        nonce
+    } else {
+        let fresh_nonce = provider.get_transaction_count(address).await
+            .map_err(|e| format!("Failed to get nonce: {}", e))?;
+        ic_cdk::println!("Got fresh nonce from network: {}", fresh_nonce);
+        fresh_nonce
+    };
     
     // 8. First approve USDC spending by Compound
     ic_cdk::println!("✅ Step 5: Approving USDC spending by Compound...");
@@ -147,32 +146,67 @@ pub async fn supply_usdc_to_compound_with_permissions(
         .nonce(nonce)
         .chain_id(chain_id)
         .from(address);
-        
+
     let approve_receipt = approve_call.send().await.map_err(|e| {
         ic_cdk::println!("❌ USDC approve failed: {}", e);
         format!("USDC approve failed: {}", e)
     })?;
-    
+
     let approve_tx_hash = *approve_receipt.tx_hash();
     ic_cdk::println!("✅ Step 5 Complete: USDC approved, hash: {:?}", approve_tx_hash);
+
+    // Wait for approve transaction and update nonce cache
+    let approve_tx_response = provider.get_transaction_by_hash(approve_tx_hash).await
+        .map_err(|e| format!("Failed to get approve transaction: {}", e))?;
+
+    match approve_tx_response {
+        Some(tx) => {
+            COMPOUND_NONCE.with_borrow_mut(|nonce_cache| {
+                *nonce_cache = Some(tx.nonce);
+            });
+            ic_cdk::println!("Approve tx confirmed, nonce cache updated to {}", tx.nonce);
+        }
+        None => {
+            return Err("Approve transaction not found after sending".to_string());
+        }
+    }
     
     // 9. Supply USDC to Compound
     ic_cdk::println!("✅ Step 6: Supplying USDC to Compound...");
     let compound_contract = CompoundComet::new(compound_address.parse::<Address>().unwrap(), &provider);
-    
+
+    // Get next nonce for supply transaction
+    let supply_nonce = nonce + 1;
+
     let supply_call = compound_contract
         .supply(usdc_address.parse::<Address>().unwrap(), amount_units)
-        .nonce(nonce + 1)
+        .nonce(supply_nonce)
         .chain_id(chain_id)
         .from(address);
-    
+
     let supply_receipt = supply_call.send().await.map_err(|e| {
         ic_cdk::println!("❌ Compound supply failed: {}", e);
         format!("Compound supply failed: {}", e)
     })?;
-    
+
     let supply_tx_hash = *supply_receipt.tx_hash();
     ic_cdk::println!("✅ Step 6 Complete: USDC supplied to Compound, hash: {:?}", supply_tx_hash);
+
+    // Wait for supply transaction and update nonce cache
+    let supply_tx_response = provider.get_transaction_by_hash(supply_tx_hash).await
+        .map_err(|e| format!("Failed to get supply transaction: {}", e))?;
+
+    match supply_tx_response {
+        Some(tx) => {
+            COMPOUND_NONCE.with_borrow_mut(|nonce_cache| {
+                *nonce_cache = Some(tx.nonce);
+            });
+            ic_cdk::println!("Supply tx confirmed, nonce cache updated to {}", tx.nonce);
+        }
+        None => {
+            return Err("Supply transaction not found after sending".to_string());
+        }
+    }
     
     // 10. Update daily usage for permissions
     ic_cdk::println!("✅ Step 7: Updating protocol usage tracking...");
@@ -253,23 +287,21 @@ pub async fn withdraw_usdc_from_compound_with_permissions(
         .with_gas_estimation()
         .wallet(wallet)
         .on_icp(config);
-    
-    // Get current nonce
-    let nonce = COMPOUND_NONCE.with(|n| {
-        let mut nonce_ref = n.borrow_mut();
-        match *nonce_ref {
-            Some(current) => {
-                *nonce_ref = Some(current + 1);
-                current + 1
-            }
-            None => {
-                // Get fresh nonce from network
-                let new_nonce = 0; // In real implementation, get from provider
-                *nonce_ref = Some(new_nonce);
-                new_nonce
-            }
-        }
+
+    // Handle nonce management (same pattern as AAVE)
+    let maybe_nonce = COMPOUND_NONCE.with_borrow(|maybe_nonce| {
+        maybe_nonce.map(|nonce| nonce + 1)
     });
+
+    let nonce = if let Some(nonce) = maybe_nonce {
+        ic_cdk::println!("Using cached nonce: {}", nonce);
+        nonce
+    } else {
+        let fresh_nonce = provider.get_transaction_count(address).await
+            .map_err(|e| format!("Failed to get nonce: {}", e))?;
+        ic_cdk::println!("Got fresh nonce from network: {}", fresh_nonce);
+        fresh_nonce
+    };
     
     // 8. Check cUSDC balance before withdrawal
     ic_cdk::println!("✅ Step 5: Checking cUSDC balance...");
@@ -292,20 +324,36 @@ pub async fn withdraw_usdc_from_compound_with_permissions(
     // 9. Withdraw USDC from Compound
     ic_cdk::println!("✅ Step 6: Withdrawing USDC from Compound...");
     let usdc_address = get_usdc_address(chain_id)?;
-    
+
     let withdraw_call = compound_contract
         .withdraw(usdc_address.parse::<Address>().unwrap(), amount_units)
         .nonce(nonce)
         .chain_id(chain_id)
         .from(address);
-    
+
     let withdraw_receipt = withdraw_call.send().await.map_err(|e| {
         ic_cdk::println!("❌ Compound withdraw failed: {}", e);
         format!("Compound withdraw failed: {}", e)
     })?;
-    
+
     let withdraw_tx_hash = *withdraw_receipt.tx_hash();
     ic_cdk::println!("✅ Step 6 Complete: USDC withdrawn from Compound, hash: {:?}", withdraw_tx_hash);
+
+    // Wait for withdraw transaction and update nonce cache
+    let withdraw_tx_response = provider.get_transaction_by_hash(withdraw_tx_hash).await
+        .map_err(|e| format!("Failed to get withdraw transaction: {}", e))?;
+
+    match withdraw_tx_response {
+        Some(tx) => {
+            COMPOUND_NONCE.with_borrow_mut(|nonce_cache| {
+                *nonce_cache = Some(tx.nonce);
+            });
+            ic_cdk::println!("Withdraw tx confirmed, nonce cache updated to {}", tx.nonce);
+        }
+        None => {
+            return Err("Withdraw transaction not found after sending".to_string());
+        }
+    }
     
     // 10. Update daily usage for permissions
     ic_cdk::println!("✅ Step 7: Updating protocol usage tracking...");
