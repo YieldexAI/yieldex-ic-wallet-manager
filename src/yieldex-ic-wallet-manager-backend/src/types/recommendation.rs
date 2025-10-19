@@ -46,7 +46,7 @@ pub struct ExecutionResult {
     pub withdraw_tx: Option<String>,          // Withdraw transaction hash
     pub swap_tx: Option<String>,              // Swap transaction hash (for future use)
     pub supply_tx: Option<String>,            // Supply transaction hash
-    pub amount_transferred:Option<String>,           // Amount actually transferred
+    pub amount_transferred: Option<String>,   // Amount actually transferred
     pub actual_gas_cost: Option<f64>,         // Actual gas cost
     pub error_details: Option<String>,        // Error details
 }

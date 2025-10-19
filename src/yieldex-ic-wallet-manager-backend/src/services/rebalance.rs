@@ -5,11 +5,8 @@ use crate::types::{Recommendation, ExecutionResult, RecommendationType};
 use crate::services::{aave, compound};
 use crate::services::rpc_service::{is_supported_chain, get_chain_name, SEPOLIA_CHAIN_ID, ARBITRUM_CHAIN_ID};
 
-// Deprecated old functions - keeping only for API compatibility but not used
-// These will be removed in future versions
-
 // =============================================================================
-// New Recommendation-based Rebalancing Functions
+// Recommendation-based Rebalancing Functions
 // =============================================================================
 
 /// Normalize protocol name to internal format
@@ -50,45 +47,32 @@ fn extract_tx_hash(result: &str) -> Option<String> {
 }
 
 /// Validate recommendation structure and parameters
-pub fn validate_recommendation(rec: &Recommendation) -> Result<(), String> {
+pub fn validate_recommendation(recommendation: &Recommendation) -> Result<(), String> {
     ic_cdk::println!("🔍 Validating recommendation...");
 
-    // Check that asset is USDC
-    if rec.asset.to_uppercase() != "USDC" {
-        return Err(format!("Only USDC is supported, got: {}", rec.asset));
-    }
+    // Check that either protocols or assets are different (otherwise it's a no-op)
+    let same_protocol = recommendation.from_protocol.eq_ignore_ascii_case(&recommendation.to_protocol);
+    let same_asset = recommendation.asset.eq_ignore_ascii_case(&recommendation.to_asset);
 
-    // Check that to_asset is also USDC
-    if rec.to_asset.to_uppercase() != "USDC" {
-        return Err(format!("Only USDC transfers are supported, got to_asset: {}", rec.to_asset));
-    }
-
-    // Check that protocols are different
-    if rec.from_protocol.eq_ignore_ascii_case(&rec.to_protocol) {
-        return Err("Source and target protocols must be different".to_string());
+    if same_protocol && same_asset {
+        return Err("Source and target must differ: either different protocols or different assets".to_string());
     }
 
     // Validate protocols
-    normalize_protocol_name(&rec.from_protocol)?;
-    normalize_protocol_name(&rec.to_protocol)?;
+    normalize_protocol_name(&recommendation.from_protocol)?;
+    normalize_protocol_name(&recommendation.to_protocol)?;
 
     // Check position_size is valid
-    let amount: f64 = rec.position_size.parse()
-        .map_err(|_| format!("Invalid position_size: {}", rec.position_size))?;
+    let amount: f64 = recommendation.position_size.parse()
+        .map_err(|_| format!("Invalid position_size: {}", recommendation.position_size))?;
 
     if amount <= 0.0 {
         return Err(format!("position_size must be positive, got: {}", amount));
     }
 
-    // Check recommendation type
-    match rec.recommendation_type {
-        RecommendationType::StandardTransfer => {},
-        // Future types can be added here
-    }
-
     // Validate cross-chain field
-    if let Some(ref to_chain) = rec.to_chain {
-        if to_chain != &rec.from_chain {
+    if let Some(ref to_chain) = recommendation.to_chain {
+        if to_chain != &recommendation.from_chain {
             return Err("Cross-chain transfers are not yet supported".to_string());
         }
     }
@@ -183,7 +167,7 @@ async fn execute_same_chain_same_asset(
         withdraw_tx: None,
         swap_tx: None,
         supply_tx: None,
-        amount_transferred: recommendation.position_size.clone(),
+        amount_transferred: Some(recommendation.position_size.clone()),
         actual_gas_cost: None,
         error_details: None,
     };
@@ -287,6 +271,9 @@ pub async fn execute_recommendation(
                 // Future: swap flow for different assets
                 Err("Asset swap not yet supported".to_string())
             }
+        }
+        RecommendationType::CrossChainTransfer => {
+            Err("Cross-chain transfers are not yet supported".to_string())
         }
     }
 }
