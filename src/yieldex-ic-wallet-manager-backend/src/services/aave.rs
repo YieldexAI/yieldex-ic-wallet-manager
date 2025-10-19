@@ -640,21 +640,11 @@ async fn ensure_token_allowance_for_aave(
     
     if current_allowance._0 < amount {
         ic_cdk::println!("⚠️ Insufficient allowance, need to approve more tokens...");
-        // Handle nonce management for approval
-        ic_cdk::println!("🔧 Getting nonce for token approval transaction...");
-        let maybe_nonce = AAVE_NONCE.with_borrow(|maybe_nonce| {
-            maybe_nonce.map(|nonce| nonce + 1)
-        });
-
-        let nonce = if let Some(nonce) = maybe_nonce {
-            ic_cdk::println!("🔧 Using cached nonce for approval: {}", nonce);
-            nonce
-        } else {
-            let fresh_nonce = provider.get_transaction_count(user_address).await
-                .map_err(|e| format!("Failed to get nonce for approval: {}", e))?;
-            ic_cdk::println!("🔧 Got fresh nonce for approval: {}", fresh_nonce);
-            fresh_nonce
-        };
+        // Always get fresh nonce for approval to avoid conflicts with other transactions
+        ic_cdk::println!("🔧 Getting fresh nonce for token approval transaction...");
+        let nonce = provider.get_transaction_count(user_address).await
+            .map_err(|e| format!("Failed to get nonce for approval: {}", e))?;
+        ic_cdk::println!("🔧 Got fresh nonce for approval: {}", nonce);
         
         // Increase allowance
         ic_cdk::println!("🚀 Sending token approval transaction...");
