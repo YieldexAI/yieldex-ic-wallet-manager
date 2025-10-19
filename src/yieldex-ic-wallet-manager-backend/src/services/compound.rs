@@ -363,6 +363,11 @@ pub async fn get_compound_usdc_balance(address: Option<String>, chain_id: u64) -
         .map_err(|e| format!("Failed to get Compound balance: {}", e))?;
     
     let balance_human = format_usdc_amount(balance._0);
+    ic_cdk::println!(
+        "📊 Compound USDC balance: {} (units: {})",
+        balance_human,
+        balance._0
+    );
     Ok(balance_human)
 }
 
