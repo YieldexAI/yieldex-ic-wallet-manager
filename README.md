@@ -204,6 +204,11 @@ yieldex-ic-wallet-manager/
 │   │   │   │   ├── ✅ approve_*.rs           # Token approval management
 │   │   │   │   ├── 🔐 permissions.rs         # Access control system
 │   │   │   │   └── 🌐 rpc_service.rs         # Multi-chain RPC management
+│   │   │   ├── 📦 types/                     # Type definitions
+│   │   │   │   ├── 📋 mod.rs                 # Type module exports
+│   │   │   │   ├── 🔒 permissions.rs         # Permission structures
+│   │   │   │   ├── 💡 recommendation.rs      # Rebalance recommendation types
+│   │   │   │   └── 💾 storable.rs            # Stable storage wrappers
 │   │   │   ├── 📄 abi/                       # Smart contract ABIs
 │   │   │   └── 🧠 lib.rs                     # Core canister logic
 │   │   └── ⚙️ Cargo.toml
@@ -388,29 +393,192 @@ dfx canister call yieldex-ic-wallet-manager-backend get_supported_chains --ic
 ### 🔄 **Cross-Protocol Rebalancing**
 
 <details>
-<summary>⚡ <strong>Automated Token Migration Between Protocols</strong></summary>
+<summary>⚡ <strong>Automated Yield Optimization via Recommendation Engine</strong></summary>
+
+The rebalancing system allows seamless migration of assets between DeFi protocols to optimize yield. The system uses a **recommendation-based approach** with structured validation and atomic execution.
+
+#### **🎯 Recommendation Structure**
+
+A recommendation defines the complete rebalancing operation:
+- **Asset & Protocol Migration**: Move tokens between AAVE and Compound
+- **Yield Optimization**: Target higher APY opportunities
+- **Safety Validation**: Pre-execution checks for permissions and balances
+- **Atomic Execution**: Either fully succeeds or safely reverts
+
+#### **📋 Execute a Recommendation**
 
 ```bash
-# 🔄 Rebalance from AAVE (LINK) to Compound (USDC)
-dfx canister call yieldex-ic-wallet-manager-backend rebalance_tokens_secured '("0.1", "AAVE", "COMPOUND", "LINK", "your-permissions-id")' --ic
+# 🔄 Rebalance 0.5 USDC from AAVE to Compound
+dfx canister call yieldex-ic-wallet-manager-backend execute_recommendation '(
+  record {
+    asset = "USDC";
+    to_asset = "USDC";
+    from_chain = "Arbitrum";
+    to_chain = null;
+    from_protocol = "aave-v3";
+    to_protocol = "compound-v3";
+    current_apy = 3.5;
+    target_apy = 4.2;
+    estimated_profit = 0.0035;
+    gas_cost = 0.50;
+    position_size = "0.5";
+    pool_id = null;
+    recommendation_type = variant { StandardTransfer };
+    swap_details = null;
+  },
+  "your-permissions-id"
+)' --ic
 
-# 📊 Check supported rebalance routes for a chain
-dfx canister call yieldex-ic-wallet-manager-backend get_supported_rebalance_routes_query '(11155111)' --ic
+# 🔄 Rebalance from Compound back to AAVE
+dfx canister call yieldex-ic-wallet-manager-backend execute_recommendation '(
+  record {
+    asset = "USDC";
+    to_asset = "USDC";
+    from_chain = "Arbitrum";
+    to_chain = null;
+    from_protocol = "compound-v3";
+    to_protocol = "aave-v3";
+    current_apy = 4.2;
+    target_apy = 3.5;
+    estimated_profit = 0.0035;
+    gas_cost = 0.50;
+    position_size = "0.5";
+    pool_id = null;
+    recommendation_type = variant { StandardTransfer };
+    swap_details = null;
+  },
+  "your-permissions-id"
+)' --ic
 
-# ✅ Check if a specific route is supported
-dfx canister call yieldex-ic-wallet-manager-backend check_rebalance_route_status '("AAVE", "COMPOUND", "LINK", 11155111)' --ic
-
-# 🔍 Get protocol-token support for a chain
-dfx canister call yieldex-ic-wallet-manager-backend get_protocol_token_support_query '(42161)' --ic
+# ✅ Validate a recommendation without executing
+dfx canister call yieldex-ic-wallet-manager-backend validate_recommendation_input '(
+  record {
+    asset = "USDC";
+    to_asset = "USDC";
+    from_chain = "Arbitrum";
+    to_chain = null;
+    from_protocol = "aave-v3";
+    to_protocol = "compound-v3";
+    current_apy = 3.5;
+    target_apy = 4.2;
+    estimated_profit = 0.0035;
+    gas_cost = 0.50;
+    position_size = "0.5";
+    pool_id = null;
+    recommendation_type = variant { StandardTransfer };
+    swap_details = null;
+  }
+)' --ic
 ```
 
-**Real Example Output:**
+#### **🔧 Recommendation Parameters**
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| `asset` | String | Source token symbol | `"USDC"` |
+| `to_asset` | String | Target token symbol | `"USDC"` |
+| `from_chain` | String | Source blockchain | `"Arbitrum"` |
+| `to_chain` | Option\<String\> | Target chain (null for same-chain) | `null` |
+| `from_protocol` | String | Source protocol | `"aave-v3"` |
+| `to_protocol` | String | Target protocol | `"compound-v3"` |
+| `current_apy` | f64 | Current APY (%) | `3.5` |
+| `target_apy` | f64 | Target APY (%) | `4.2` |
+| `estimated_profit` | f64 | Expected profit (USD) | `0.0035` |
+| `gas_cost` | f64 | Estimated gas (USD) | `0.50` |
+| `position_size` | String | Amount to rebalance | `"0.5"` |
+| `pool_id` | Option\<String\> | Specific pool ID | `null` |
+| `recommendation_type` | Enum | Transfer type | `StandardTransfer` or `CrossChainTransfer` |
+| `swap_details` | Option\<SwapDetails\> | Swap info (if needed) | `null` |
+
+#### **🎯 Execution Flow**
+
+1. **Validation Phase**:
+   - ✅ Verify protocols differ or assets differ
+   - ✅ Check position_size is positive
+   - ✅ Validate protocol names
+   - ✅ Confirm permissions exist and match owner
+   - ✅ Ensure sufficient balance
+
+2. **Withdrawal Phase**:
+   - 📤 Withdraw tokens from source protocol (AAVE/Compound)
+   - 🔍 Record transaction hash
+   - ⚡ Update nonce cache
+
+3. **Supply Phase**:
+   - 📥 Supply tokens to target protocol
+   - 🔓 Approve tokens if needed (auto-handled)
+   - 🔍 Record transaction hash
+   - ⚡ Update usage limits
+
+4. **Result**:
+   ```rust
+   ExecutionResult {
+     status: "success" | "partial" | "failed",
+     withdraw_tx: Option<String>,  // Withdraw transaction hash
+     swap_tx: Option<String>,       // Swap tx (if applicable)
+     supply_tx: Option<String>,     // Supply transaction hash
+     amount_transferred: Option<String>,
+     actual_gas_cost: Option<f64>,
+     error_details: Option<String>
+   }
+   ```
+
+#### **🔒 Permission Requirements**
+
+To execute rebalancing, your permissions must include:
 
 ```bash
-✅ Successfully rebalanced 0.1 LINK from AAVE to COMPOUND! 
-Withdraw: Transaction 0xdef456... | Supply: Transaction 0xghi789...
-🚀 Optimized yield strategy executed!
+# Both protocols must be whitelisted
+whitelisted_protocols = vec {
+  record { name = "AAVE V3"; address = "0x794a61358D6845594F94dc1DB02A252b5b4814aD" };
+  record { name = "Compound V3"; address = "0x9c4ec768c28520b50860ea7a15bd7213a9ff58bf" };
+}
+
+# Both protocols need supply/withdraw permissions
+protocol_permissions = vec {
+  record {
+    protocol_address = "0x794a61358D6845594F94dc1DB02A252b5b4814aD";
+    allowed_functions = vec { "supply"; "withdraw" };
+    max_amount_per_tx = opt (20_000_000 : nat64);  // 20 USDC
+    daily_limit = opt (50_000_000 : nat64);        // 50 USDC
+  };
+  record {
+    protocol_address = "0x9c4ec768c28520b50860ea7a15bd7213a9ff58bf";
+    allowed_functions = vec { "supply"; "withdraw" };
+    max_amount_per_tx = opt (20_000_000 : nat64);
+    daily_limit = opt (50_000_000 : nat64);
+  };
+}
 ```
+
+#### **📊 Real Example Output**
+
+```bash
+variant {
+  Ok = record {
+    status = "success";
+    withdraw_tx = opt "0xdac5cb9c111a472a889c0d54fd5a118d16b87537651d1d219602f94769c2f8de";
+    swap_tx = null;
+    supply_tx = opt "0x89816f5f8262ec38436c68f2c1dd87ab12506b56b14136c15c89ae4ab5551295";
+    amount_transferred = opt "0.5";
+    actual_gas_cost = null;
+    error_details = null;
+  }
+}
+
+🎉 Rebalance completed successfully!
+📤 Withdrawn from AAVE: 0xdac5cb9c...
+📥 Supplied to Compound: 0x89816f5f...
+💰 Optimizing yield on 0.5 USDC!
+```
+
+#### **⚠️ Important Notes**
+
+- **Nonce Management**: System uses fresh nonces for approval transactions to prevent conflicts
+- **Gas Optimization**: Transactions are batched when possible to reduce costs
+- **Atomic Safety**: If supply fails after successful withdraw, funds remain in wallet (status: `partial`)
+- **Cross-Chain**: Currently supports same-chain transfers only (`to_chain` must be null)
+- **Supported Routes**: AAVE ↔ Compound on Arbitrum for USDC
 
 </details>
 
