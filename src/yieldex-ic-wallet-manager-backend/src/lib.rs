@@ -1,15 +1,21 @@
-use candid::{CandidType, Principal};
+use candid::Principal;
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
-use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 
 // Alloy imports
 use alloy::signers::icp::IcpSigner;
 use alloy::signers::Signer; // The Signer trait
 use alloy::primitives::Address;
+
+// Types module
+mod types;
+use types::{
+    Permissions, CreatePermissionsRequest, UpdatePermissionsRequest,
+    ProtocolPermission, Recommendation, ExecutionResult,
+    StorablePrincipal, StorableString, StorablePermissions,
+};
 
 // Services module
 mod services;
@@ -26,127 +32,12 @@ use services::{
     permissions::{is_permissions_owner, verify_protocol_permission, add_protocol_permission, set_daily_usage},
     aave::{supply_link_to_aave_with_permissions, withdraw_link_from_aave_with_permissions, get_aave_link_balance, supply_to_aave_with_permissions, withdraw_from_aave_with_permissions}, // 🆕 AAVE Service Methods (Sprint 2)
     compound::{supply_usdc_to_compound_with_permissions, withdraw_usdc_from_compound_with_permissions, get_compound_usdc_balance}, // 🆕 Compound Service Methods
-    rebalance::{rebalance_tokens, get_supported_rebalance_routes, get_rebalance_route_status}, // 🆕 Rebalance Service Methods
+    rebalance::{execute_recommendation as execute_recommendation_impl, validate_recommendation}, // 🆕 Rebalance Service Methods
     rpc_service::{is_supported_chain, get_supported_chains_info} // 🆕 RPC Service imports
 };
 
 // --- Types ---
 type Memory = VirtualMemory<DefaultMemoryImpl>;
-
-// --- Permissions Types ---
-type PermissionsId = String;
-type TokenAddress = String;
-
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Protocol {
-    pub name: String,
-    pub address: String,
-}
-
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-pub struct TransferLimit {
-    token_address: TokenAddress,
-    daily_limit: u64,
-    max_tx_amount: u64,
-}
-
-// 🆕 New type for protocol permissions (Task 1.1)
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-pub struct ProtocolPermission {
-    pub protocol_address: String,
-    pub allowed_functions: Vec<String>, // ["supply", "withdraw", "borrow"]
-    pub max_amount_per_tx: Option<u64>,
-    pub daily_limit: Option<u64>,
-    pub total_used_today: u64,
-    pub last_reset_date: u64, // Timestamp for daily limit reset
-}
-
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Token {
-    pub name: String,
-    pub address: String,
-}
-
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-pub struct Permissions {
-    id: PermissionsId,
-    owner: Principal,
-    chain_id: u64,                                  // 🆕 Chain ID for multi-chain support
-    whitelisted_protocols: Vec<Protocol>,
-    whitelisted_tokens: Vec<Token>,
-    transfer_limits: Vec<TransferLimit>,
-    protocol_permissions: Vec<ProtocolPermission>, // 🆕 New field (Task 1.1)
-    created_at: u64,
-    updated_at: u64,
-}
-
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-pub struct CreatePermissionsRequest {
-    chain_id: u64,                                         // 🆕 Required chain ID
-    whitelisted_protocols: Vec<Protocol>,
-    whitelisted_tokens: Vec<Token>,
-    transfer_limits: Vec<TransferLimit>,
-    protocol_permissions: Option<Vec<ProtocolPermission>>, // 🆕 Add protocol permissions
-}
-
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-pub struct UpdatePermissionsRequest {
-    permissions_id: PermissionsId,
-    chain_id: Option<u64>,                                 // 🆕 Optional chain ID update
-    whitelisted_protocols: Option<Vec<Protocol>>,
-    whitelisted_tokens: Option<Vec<Token>>,
-    transfer_limits: Option<Vec<TransferLimit>>,
-}
-
-// Storable implementations
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-struct StorablePrincipal(Principal);
-
-impl Storable for StorablePrincipal {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(self.0.as_slice().to_vec())
-    }
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        StorablePrincipal(Principal::from_slice(&bytes))
-    }
-
-    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Unbounded;
-}
-
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-struct StorableString(String);
-
-impl Storable for StorableString {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(self.0.as_bytes().to_vec())
-    }
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        StorableString(String::from_utf8(bytes.into_owned()).expect("Invalid UTF-8 for string"))
-    }
-
-    // Assuming max EVM address hex length (0x + 40 hex chars) = 42 bytes
-    // Add some buffer
-    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Bounded { max_size: 64, is_fixed_size: false };
-}
-
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
-struct StorablePermissions(Permissions);
-
-impl Storable for StorablePermissions {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        let bytes = candid::encode_one(&self.0).expect("Failed to encode permissions");
-        Cow::Owned(bytes)
-    }
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        let permissions: Permissions = candid::decode_one(&bytes).expect("Failed to decode permissions");
-        StorablePermissions(permissions)
-    }
-
-    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Unbounded;
-}
 
 // --- State ---
 const PRINCIPAL_MAP_MEMORY_ID: MemoryId = MemoryId::new(0);
@@ -1019,40 +910,23 @@ async fn get_compound_usdc_user_balance(address: Option<String>, chain_id: u64) 
 
 // --- Rebalance Service Methods ---
 
-/// Rebalance tokens between DeFi protocols
+/// Execute recommendation for rebalancing
 #[update]
-async fn rebalance_tokens_secured(
-    amount: String,
-    source_protocol: String,
-    target_protocol: String,
-    token: String,
+async fn execute_recommendation(
+    recommendation: Recommendation,
     permissions_id: String
-) -> Result<String, String> {
+) -> Result<ExecutionResult, String> {
     let caller = ic_cdk::caller();
-    rebalance_tokens(amount, source_protocol, target_protocol, token, permissions_id, caller).await
+    execute_recommendation_impl(recommendation, permissions_id, caller).await
 }
 
-/// Get supported rebalance routes for a specific chain
+/// Validate recommendation without executing
 #[query]
-fn get_supported_rebalance_routes_query(chain_id: u64) -> Vec<(String, String, String)> {
-    get_supported_rebalance_routes(chain_id)
-}
-
-/// Check rebalance route status for a specific chain
-#[query]
-fn check_rebalance_route_status(
-    source_protocol: String,
-    target_protocol: String,
-    token: String,
-    chain_id: u64
-) -> String {
-    get_rebalance_route_status(&source_protocol, &target_protocol, &token, chain_id)
-}
-
-/// Get supported protocol-token combinations for a specific chain
-#[query]
-fn get_protocol_token_support_query(chain_id: u64) -> Vec<(String, String)> {
-    services::rebalance::get_protocol_token_support(chain_id)
+fn validate_recommendation_input(
+    recommendation: Recommendation
+) -> Result<String, String> {
+    validate_recommendation(&recommendation)?;
+    Ok("Recommendation is valid".to_string())
 }
 
 // --- Uniswap Service Methods ---

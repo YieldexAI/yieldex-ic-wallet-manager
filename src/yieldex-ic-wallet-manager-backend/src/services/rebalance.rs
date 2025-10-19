@@ -1,268 +1,292 @@
 use candid::Principal;
+use alloy::primitives::{address, Address};
 use crate::{PERMISSIONS_MAP, StorableString};
+use crate::types::{Recommendation, ExecutionResult, RecommendationType};
 use crate::services::{aave, compound};
-use crate::services::rpc_service::{is_supported_chain, get_chain_name, SEPOLIA_CHAIN_ID, ARBITRUM_CHAIN_ID, BASE_CHAIN_ID, OPTIMISM_CHAIN_ID};
+use crate::services::rpc_service::{is_supported_chain, get_chain_name, SEPOLIA_CHAIN_ID, ARBITRUM_CHAIN_ID};
 
-/// Unified rebalance interface that can move tokens between any supported protocols
-/// 
-/// This function provides a scalable approach by calling protocol-specific supply/withdraw methods
-/// directly without needing separate functions for each direction.
-pub async fn rebalance_tokens(
+// Deprecated old functions - keeping only for API compatibility but not used
+// These will be removed in future versions
+
+// =============================================================================
+// New Recommendation-based Rebalancing Functions
+// =============================================================================
+
+/// Normalize protocol name to internal format
+fn normalize_protocol_name(protocol: &str) -> Result<&str, String> {
+    match protocol.to_lowercase().as_str() {
+        "aave-v3" | "aave" => Ok("AAVE"),
+        "compound-v3" | "compound" => Ok("COMPOUND"),
+        _ => Err(format!("Unknown protocol: {}", protocol))
+    }
+}
+
+/// Get USDC address for a specific chain
+fn get_usdc_address(chain_id: u64) -> Result<Address, String> {
+    match chain_id {
+        ARBITRUM_CHAIN_ID => {
+            // Native USDC on Arbitrum
+            Ok(address!("af88d065e77c8cC2239327C5EDb3A432268e5831"))
+        },
+        SEPOLIA_CHAIN_ID => {
+            // USDC on Sepolia testnet
+            Ok(address!("94a9D9AC8a22534E3FaCa9954e183B2c3736704F"))
+        },
+        _ => Err(format!("USDC not configured for chain_id: {}", chain_id))
+    }
+}
+
+/// Extract transaction hash from result string
+fn extract_tx_hash(result: &str) -> Option<String> {
+    // Result strings typically contain "Transaction: 0x..." or similar
+    if let Some(start) = result.find("0x") {
+        let hash_part = &result[start..];
+        // Take until first whitespace or end of string
+        let end = hash_part.find(char::is_whitespace).unwrap_or(hash_part.len());
+        Some(hash_part[..end.min(66)].to_string()) // 0x + 64 chars = 66
+    } else {
+        None
+    }
+}
+
+/// Validate recommendation structure and parameters
+pub fn validate_recommendation(rec: &Recommendation) -> Result<(), String> {
+    ic_cdk::println!("🔍 Validating recommendation...");
+
+    // Check that asset is USDC
+    if rec.asset.to_uppercase() != "USDC" {
+        return Err(format!("Only USDC is supported, got: {}", rec.asset));
+    }
+
+    // Check that to_asset is also USDC
+    if rec.to_asset.to_uppercase() != "USDC" {
+        return Err(format!("Only USDC transfers are supported, got to_asset: {}", rec.to_asset));
+    }
+
+    // Check that protocols are different
+    if rec.from_protocol.eq_ignore_ascii_case(&rec.to_protocol) {
+        return Err("Source and target protocols must be different".to_string());
+    }
+
+    // Validate protocols
+    normalize_protocol_name(&rec.from_protocol)?;
+    normalize_protocol_name(&rec.to_protocol)?;
+
+    // Check position_size is valid
+    let amount: f64 = rec.position_size.parse()
+        .map_err(|_| format!("Invalid position_size: {}", rec.position_size))?;
+
+    if amount <= 0.0 {
+        return Err(format!("position_size must be positive, got: {}", amount));
+    }
+
+    // Check recommendation type
+    match rec.recommendation_type {
+        RecommendationType::StandardTransfer => {},
+        // Future types can be added here
+    }
+
+    // Validate cross-chain field
+    if let Some(ref to_chain) = rec.to_chain {
+        if to_chain != &rec.from_chain {
+            return Err("Cross-chain transfers are not yet supported".to_string());
+        }
+    }
+
+    ic_cdk::println!("✅ Recommendation validation successful");
+    Ok(())
+}
+
+/// Execute withdraw from protocol
+async fn execute_protocol_withdraw(
+    protocol: &str,
     amount: String,
-    source_protocol: String,    // "AAVE" | "COMPOUND"
-    target_protocol: String,    // "AAVE" | "COMPOUND"
-    token: String,              // "USDC" | "LINK"
+    permissions_id: String,
+    user_principal: Principal,
+    chain_id: u64
+) -> Result<String, String> {
+    let normalized_protocol = normalize_protocol_name(protocol)?;
+
+    ic_cdk::println!("🏦 Executing withdraw from {} protocol...", normalized_protocol);
+
+    match normalized_protocol {
+        "AAVE" => {
+            let usdc_addr = get_usdc_address(chain_id)?;
+            aave::withdraw_from_aave_with_permissions(
+                usdc_addr,
+                "USDC".to_string(),
+                amount,
+                permissions_id,
+                user_principal,
+                chain_id
+            ).await
+        },
+        "COMPOUND" => {
+            compound::withdraw_usdc_from_compound_with_permissions(
+                amount,
+                permissions_id,
+                user_principal
+            ).await
+        },
+        _ => Err(format!("Unsupported protocol for withdraw: {}", protocol))
+    }
+}
+
+/// Execute supply to protocol
+async fn execute_protocol_supply(
+    protocol: &str,
+    amount: String,
+    permissions_id: String,
+    user_principal: Principal,
+    chain_id: u64
+) -> Result<String, String> {
+    let normalized_protocol = normalize_protocol_name(protocol)?;
+
+    ic_cdk::println!("🏛️ Executing supply to {} protocol...", normalized_protocol);
+
+    match normalized_protocol {
+        "AAVE" => {
+            let usdc_addr = get_usdc_address(chain_id)?;
+            aave::supply_to_aave_with_permissions(
+                usdc_addr,
+                "USDC".to_string(),
+                amount,
+                permissions_id,
+                user_principal,
+                chain_id
+            ).await
+        },
+        "COMPOUND" => {
+            compound::supply_usdc_to_compound_with_permissions(
+                amount,
+                permissions_id,
+                user_principal
+            ).await
+        },
+        _ => Err(format!("Unsupported protocol for supply: {}", protocol))
+    }
+}
+
+/// Execute same-chain same-asset rebalance flow
+async fn execute_same_chain_same_asset(
+    recommendation: &Recommendation,
+    permissions_id: String,
+    user_principal: Principal,
+    chain_id: u64
+) -> Result<ExecutionResult, String> {
+    ic_cdk::println!("🔄 Starting same-chain same-asset rebalance flow");
+    ic_cdk::println!("  From: {} | To: {} | Amount: {} USDC",
+        recommendation.from_protocol, recommendation.to_protocol, recommendation.position_size);
+
+    let mut result = ExecutionResult {
+        status: "pending".to_string(),
+        withdraw_tx: None,
+        swap_tx: None,
+        supply_tx: None,
+        amount_transferred: recommendation.position_size.clone(),
+        actual_gas_cost: None,
+        error_details: None,
+    };
+
+    // Step 1: Withdraw from source protocol
+    ic_cdk::println!("📤 Step 1: Withdrawing from {}...", recommendation.from_protocol);
+    match execute_protocol_withdraw(
+        &recommendation.from_protocol,
+        recommendation.position_size.clone(),
+        permissions_id.clone(),
+        user_principal,
+        chain_id
+    ).await {
+        Ok(withdraw_result) => {
+            ic_cdk::println!("✅ Withdraw successful: {}", withdraw_result);
+            result.withdraw_tx = extract_tx_hash(&withdraw_result);
+        },
+        Err(e) => {
+            ic_cdk::println!("❌ Withdraw failed: {}", e);
+            result.status = "failed".to_string();
+            result.error_details = Some(format!("Withdraw failed: {}", e));
+            return Ok(result);
+        }
+    }
+
+    // Step 2: Supply to target protocol
+    ic_cdk::println!("📥 Step 2: Supplying to {}...", recommendation.to_protocol);
+    match execute_protocol_supply(
+        &recommendation.to_protocol,
+        recommendation.position_size.clone(),
+        permissions_id,
+        user_principal,
+        chain_id
+    ).await {
+        Ok(supply_result) => {
+            ic_cdk::println!("✅ Supply successful: {}", supply_result);
+            result.supply_tx = extract_tx_hash(&supply_result);
+            result.status = "success".to_string();
+        },
+        Err(e) => {
+            ic_cdk::println!("❌ Supply failed: {}", e);
+            result.status = "partial".to_string();
+            result.error_details = Some(format!("Supply failed: {}. Funds withdrawn but not supplied.", e));
+        }
+    }
+
+    ic_cdk::println!("🎉 Rebalance flow completed with status: {}", result.status);
+    Ok(result)
+}
+
+/// Main recommendation execution function
+pub async fn execute_recommendation(
+    recommendation: Recommendation,
     permissions_id: String,
     user_principal: Principal
-) -> Result<String, String> {
-    ic_cdk::println!("🔄 Starting rebalance: {} {} from {} to {} for principal {}", 
-                    amount, token, source_protocol, target_protocol, user_principal);
-    
-    // 1. Validate permissions and get chain_id
-    ic_cdk::println!("✅ Step 1: Validating permissions...");
+) -> Result<ExecutionResult, String> {
+    ic_cdk::println!("🚀 Starting recommendation execution");
+    ic_cdk::println!("  Asset: {} → {}", recommendation.asset, recommendation.to_asset);
+    ic_cdk::println!("  Protocol: {} → {}", recommendation.from_protocol, recommendation.to_protocol);
+    ic_cdk::println!("  Amount: {} USDC", recommendation.position_size);
+    ic_cdk::println!("  User: {}", user_principal);
+
+    // Step 1: Validate recommendation
+    validate_recommendation(&recommendation)?;
+
+    // Step 2: Get permissions and chain_id
+    ic_cdk::println!("🔐 Getting permissions...");
     let permissions = PERMISSIONS_MAP.with(|map| {
         map.borrow()
             .get(&StorableString(permissions_id.clone()))
             .ok_or_else(|| "Permissions not found".to_string())
             .map(|p| p.0.clone())
     })?;
-    
+
     // Check ownership
     if permissions.owner != user_principal {
         return Err("Not authorized to use these permissions".to_string());
     }
-    
+
     let chain_id = permissions.chain_id;
-    ic_cdk::println!("✅ Step 1 Complete: Using chain_id: {} ({})", 
-                    chain_id, get_chain_name(chain_id).unwrap_or("Unknown"));
-    
-    // 2. Validate chain support
+    ic_cdk::println!("✅ Using chain_id: {} ({})",
+        chain_id, get_chain_name(chain_id).unwrap_or("Unknown"));
+
+    // Step 3: Validate chain support
     if !is_supported_chain(chain_id) {
         return Err(format!("Unsupported chain_id: {}", chain_id));
     }
-    
-    // 3. Validate protocols and token combination
-    ic_cdk::println!("✅ Step 2: Validating rebalance route...");
-    validate_rebalance_route(&source_protocol, &target_protocol, &token, chain_id)?;
-    ic_cdk::println!("✅ Step 2 Complete: Route validated");
-    
-    // 4. Execute rebalance using generic protocol operations
-    ic_cdk::println!("✅ Step 3: Executing rebalance...");
-    
-    // Step 3a: Withdraw from source protocol
-    ic_cdk::println!("🏦 Step 3a: Withdrawing {} {} from {}...", amount, token, source_protocol);
-    let withdraw_result = execute_protocol_withdraw(
-        &source_protocol, 
-        &token, 
-        amount.clone(), 
-        permissions_id.clone(), 
-        user_principal
-    ).await?;
-    ic_cdk::println!("✅ Step 3a Complete: {}", withdraw_result);
-    
-    // Step 3b: Supply to target protocol
-    ic_cdk::println!("🏛️ Step 3b: Supplying {} {} to {}...", amount, token, target_protocol);
-    let supply_result = execute_protocol_supply(
-        &target_protocol, 
-        &token, 
-        amount.clone(), 
-        permissions_id, 
-        user_principal
-    ).await?;
-    ic_cdk::println!("✅ Step 3b Complete: {}", supply_result);
-    
-    let success_message = format!(
-        "✅ Successfully rebalanced {} {} from {} to {}! Withdraw: {} | Supply: {}",
-        amount, token, source_protocol, target_protocol, withdraw_result, supply_result
-    );
-    
-    ic_cdk::println!("🎉 Rebalance completed successfully");
-    Ok(success_message)
-}
 
-/// Generic protocol withdraw operation - calls the appropriate protocol's withdraw function
-async fn execute_protocol_withdraw(
-    protocol: &str,
-    token: &str,
-    amount: String,
-    permissions_id: String,
-    user_principal: Principal
-) -> Result<String, String> {
-    match (protocol.to_uppercase().as_str(), token.to_uppercase().as_str()) {
-        ("AAVE", "LINK") => {
-            aave::withdraw_link_from_aave_with_permissions(
-                amount, permissions_id, user_principal
-            ).await
-        },
-        ("COMPOUND", "USDC") => {
-            compound::withdraw_usdc_from_compound_with_permissions(
-                amount, permissions_id, user_principal
-            ).await
-        },
-        ("AAVE", "USDC") => {
-            Err("AAVE USDC operations not implemented yet. Currently only LINK is supported in AAVE.".to_string())
-        },
-        ("COMPOUND", "LINK") => {
-            Err("Compound LINK operations not implemented yet. Currently only USDC is supported in Compound.".to_string())
-        },
-        _ => {
-            Err(format!("Unsupported protocol-token combination: {} - {}", protocol, token))
-        }
-    }
-}
-
-/// Generic protocol supply operation - calls the appropriate protocol's supply function
-async fn execute_protocol_supply(
-    protocol: &str,
-    token: &str,
-    amount: String,
-    permissions_id: String,
-    user_principal: Principal
-) -> Result<String, String> {
-    match (protocol.to_uppercase().as_str(), token.to_uppercase().as_str()) {
-        ("AAVE", "LINK") => {
-            aave::supply_link_to_aave_with_permissions(
-                amount, permissions_id, user_principal
-            ).await
-        },
-        ("COMPOUND", "USDC") => {
-            compound::supply_usdc_to_compound_with_permissions(
-                amount, permissions_id, user_principal
-            ).await
-        },
-        ("AAVE", "USDC") => {
-            Err("AAVE USDC operations not implemented yet. Currently only LINK is supported in AAVE.".to_string())
-        },
-        ("COMPOUND", "LINK") => {
-            Err("Compound LINK operations not implemented yet. Currently only USDC is supported in Compound.".to_string())
-        },
-        _ => {
-            Err(format!("Unsupported protocol-token combination: {} - {}", protocol, token))
-        }
-    }
-}
-
-/// Validate that the rebalance route is supported
-fn validate_rebalance_route(
-    source_protocol: &str,
-    target_protocol: &str,
-    token: &str,
-    chain_id: u64
-) -> Result<(), String> {
-    // Validate protocols
-    let valid_protocols = ["AAVE", "COMPOUND"];
-    if !valid_protocols.contains(&source_protocol.to_uppercase().as_str()) {
-        return Err(format!("Invalid source protocol: {}. Supported: {:?}", source_protocol, valid_protocols));
-    }
-    if !valid_protocols.contains(&target_protocol.to_uppercase().as_str()) {
-        return Err(format!("Invalid target protocol: {}. Supported: {:?}", target_protocol, valid_protocols));
-    }
-    
-    // Validate token
-    let valid_tokens = ["USDC", "LINK"];
-    if !valid_tokens.contains(&token.to_uppercase().as_str()) {
-        return Err(format!("Invalid token: {}. Supported: {:?}", token, valid_tokens));
-    }
-    
-    // Validate that source and target are different
-    if source_protocol.eq_ignore_ascii_case(target_protocol) {
-        return Err("Source and target protocols must be different".to_string());
-    }
-    
-    // Validate chain-specific protocol support
-    match (source_protocol.to_uppercase().as_str(), target_protocol.to_uppercase().as_str(), chain_id) {
-        ("AAVE", _, ARBITRUM_CHAIN_ID | BASE_CHAIN_ID | OPTIMISM_CHAIN_ID) => {
-            return Err("AAVE is not supported on this chain. AAVE is only available on Sepolia.".to_string())
-        },
-        (_, "AAVE", ARBITRUM_CHAIN_ID | BASE_CHAIN_ID | OPTIMISM_CHAIN_ID) => {
-            return Err("AAVE is not supported on this chain. AAVE is only available on Sepolia.".to_string())
-        },
-        ("COMPOUND", _, SEPOLIA_CHAIN_ID | BASE_CHAIN_ID | OPTIMISM_CHAIN_ID) => {
-            return Err("Compound is not supported on this chain. Compound is only available on Arbitrum.".to_string())
-        },
-        (_, "COMPOUND", SEPOLIA_CHAIN_ID | BASE_CHAIN_ID | OPTIMISM_CHAIN_ID) => {
-            return Err("Compound is not supported on this chain. Compound is only available on Arbitrum.".to_string())
-        },
-        _ => {}
-    }
-    
-    // Validate specific token-protocol combinations
-    validate_protocol_token_support(source_protocol, token)?;
-    validate_protocol_token_support(target_protocol, token)?;
-    
-    Ok(())
-}
-
-/// Validate that a protocol supports a specific token
-fn validate_protocol_token_support(protocol: &str, token: &str) -> Result<(), String> {
-    match (protocol.to_uppercase().as_str(), token.to_uppercase().as_str()) {
-        ("AAVE", "LINK") => Ok(()),
-        ("COMPOUND", "USDC") => Ok(()),
-        ("AAVE", "USDC") => {
-            Err("AAVE USDC operations not implemented yet. Currently only LINK is supported in AAVE.".to_string())
-        },
-        ("COMPOUND", "LINK") => {
-            Err("Compound LINK operations not implemented yet. Currently only USDC is supported in Compound.".to_string())
-        },
-        _ => {
-            Err(format!("Unsupported protocol-token combination: {} - {}", protocol, token))
-        }
-    }
-}
-
-/// Get supported rebalance routes for a specific chain
-pub fn get_supported_rebalance_routes(chain_id: u64) -> Vec<(String, String, String)> {
-    let mut routes = Vec::new();
-    
-    // Check each possible combination
-    let protocols = ["AAVE", "COMPOUND"];
-    let tokens = ["USDC", "LINK"];
-    
-    for &source in &protocols {
-        for &target in &protocols {
-            for &token in &tokens {
-                if source != target {
-                    if validate_rebalance_route(source, target, token, chain_id).is_ok() {
-                        routes.push((
-                            source.to_string(),
-                            target.to_string(), 
-                            token.to_string()
-                        ));
-                    }
-                }
+    // Step 4: Determine and execute flow
+    match recommendation.recommendation_type {
+        RecommendationType::StandardTransfer => {
+            // For same chain, same asset (USDC → USDC)
+            if recommendation.asset == recommendation.to_asset {
+                execute_same_chain_same_asset(
+                    &recommendation,
+                    permissions_id,
+                    user_principal,
+                    chain_id
+                ).await
+            } else {
+                // Future: swap flow for different assets
+                Err("Asset swap not yet supported".to_string())
             }
         }
     }
-    
-    routes
-}
-
-/// Get rebalance route status for a specific chain
-pub fn get_rebalance_route_status(
-    source_protocol: &str,
-    target_protocol: &str,
-    token: &str,
-    chain_id: u64
-) -> String {
-    match validate_rebalance_route(source_protocol, target_protocol, token, chain_id) {
-        Ok(_) => "Supported".to_string(),
-        Err(reason) => format!("Not supported: {}", reason)
-    }
-}
-
-/// Get all protocol-token combinations supported on a chain
-pub fn get_protocol_token_support(chain_id: u64) -> Vec<(String, String)> {
-    let mut combinations = Vec::new();
-    
-    match chain_id {
-        SEPOLIA_CHAIN_ID => {
-            combinations.push(("AAVE".to_string(), "LINK".to_string()));
-        },
-        ARBITRUM_CHAIN_ID => {
-            combinations.push(("COMPOUND".to_string(), "USDC".to_string()));
-        },
-        _ => {}
-    }
-    
-    combinations
 }
