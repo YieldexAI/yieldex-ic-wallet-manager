@@ -65,4 +65,5 @@ pub struct UpdatePermissionsRequest {
     pub whitelisted_protocols: Option<Vec<Protocol>>,
     pub whitelisted_tokens: Option<Vec<Token>>,
     pub transfer_limits: Option<Vec<TransferLimit>>,
+    pub protocol_permissions: Option<Vec<ProtocolPermission>>,
 }

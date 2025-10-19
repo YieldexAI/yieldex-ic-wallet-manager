@@ -477,16 +477,43 @@ fn update_permissions(req: UpdatePermissionsRequest) -> Result<Permissions, Stri
     }
     
     if let Some(limits) = req.transfer_limits {
-        ic_cdk::println!("🔄 Updating transfer limits: {} -> {}", 
+        ic_cdk::println!("🔄 Updating transfer limits: {} -> {}",
                         permissions.transfer_limits.len(), limits.len());
         for (i, limit) in limits.iter().enumerate() {
-            ic_cdk::println!("    {}. Token {} - Daily: {}, Max TX: {}", 
+            ic_cdk::println!("    {}. Token {} - Daily: {}, Max TX: {}",
                             i + 1, limit.token_address, limit.daily_limit, limit.max_tx_amount);
         }
         permissions.transfer_limits = limits;
         changes_made += 1;
     }
-    
+
+    if let Some(protocol_perms) = req.protocol_permissions {
+        ic_cdk::println!("🔄 Updating protocol permissions: {} -> {}",
+                        permissions.protocol_permissions.len(), protocol_perms.len());
+        for (i, perm) in protocol_perms.iter().enumerate() {
+            ic_cdk::println!("    {}. Protocol {} - Functions: {:?}",
+                            i + 1, perm.protocol_address, perm.allowed_functions);
+            if let Some(max_tx) = perm.max_amount_per_tx {
+                ic_cdk::println!("       Max per TX: {}", max_tx);
+            }
+            if let Some(daily) = perm.daily_limit {
+                ic_cdk::println!("       Daily limit: {}", daily);
+            }
+        }
+
+        // Normalize protocol addresses in protocol_permissions
+        let normalized_protocol_permissions = protocol_perms
+            .into_iter()
+            .map(|mut pp| {
+                pp.protocol_address = normalize_address(&pp.protocol_address);
+                pp
+            })
+            .collect();
+
+        permissions.protocol_permissions = normalized_protocol_permissions;
+        changes_made += 1;
+    }
+
     ic_cdk::println!("✅ Step 3 Complete: {} field(s) updated", changes_made);
     
     // Update the timestamp
