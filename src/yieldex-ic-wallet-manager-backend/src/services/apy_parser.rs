@@ -137,13 +137,21 @@ pub fn is_apy_parser_enabled() -> bool {
 
 /// Main APY collection execution
 async fn execute_apy_collection() {
+    execute_apy_collection_internal(false).await;
+}
+
+async fn execute_apy_collection_internal(force: bool) {
     ic_cdk::println!("⏰ APY collection started at {}", now());
 
     let config = APY_PARSER_CONFIG.with(|c| c.borrow().clone());
 
-    if !config.enabled {
+    if !force && !config.enabled {
         ic_cdk::println!("⚠️ APY Parser is disabled, skipping collection");
         return;
+    }
+
+    if force && !config.enabled {
+        ic_cdk::println!("🔨 Forced manual collection - APY Parser is disabled but continuing anyway");
     }
 
     let mut total_collected = 0;
@@ -657,7 +665,7 @@ pub fn set_apy_parser_interval(seconds: u64) -> Result<String, String> {
 pub async fn trigger_manual_apy_collection() -> Result<String, String> {
     ic_cdk::println!("🔨 Manual APY collection triggered...");
 
-    execute_apy_collection().await;
+    execute_apy_collection_internal(true).await;
 
     Ok("APY collection executed successfully".to_string())
 }
