@@ -16,7 +16,7 @@ use types::{
     ProtocolPermission, Recommendation, ExecutionResult,
     StorablePrincipal, StorableString, StorablePermissions,
     StorableUserPosition, StorableApyHistoryRecord, StorableRebalanceExecution,
-    ProtocolApyInfo, ApyResponse,
+    ProtocolApyInfo, ApyResponse, ApyParserStatus,
     SchedulerConfig, SchedulerStatus, RebalanceExecution,
     UserPosition, ApyHistoryRecord, // 🆕 APY Parser types
 };
@@ -1465,6 +1465,16 @@ fn admin_get_tracked_positions() -> Vec<UserPosition> {
     ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
 
     apy_parser::get_tracked_positions()
+}
+
+/// Get APY parser status (Admin only)
+#[query]
+fn admin_get_apy_parser_status() -> Result<ApyParserStatus, String> {
+    is_admin()?;
+    ic_cdk::println!("📊 [ADMIN] Getting APY parser status");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    Ok(apy_parser::get_apy_parser_status())
 }
 
 // --- Helper Functions ---

@@ -694,3 +694,28 @@ pub async fn trigger_manual_apy_collection() -> Result<String, String> {
 pub fn get_apy_parser_config() -> ApyParserConfig {
     APY_PARSER_CONFIG.with(|c| c.borrow().clone())
 }
+
+/// Get APY parser status
+pub fn get_apy_parser_status() -> crate::types::ApyParserStatus {
+    let config = APY_PARSER_CONFIG.with(|c| c.borrow().clone());
+    
+    // Check if timer is active
+    let timer_active = APY_PARSER_TIMER_ID.with(|timer_id| {
+        timer_id.borrow().is_some()
+    });
+    
+    // Get total records count from APY_HISTORY_MAP
+    let total_records = crate::APY_HISTORY_MAP.with(|map| {
+        map.borrow().len()
+    });
+    
+    crate::types::ApyParserStatus {
+        enabled: config.enabled,
+        interval_seconds: config.interval_seconds,
+        timer_active,
+        last_execution: config.last_execution,
+        total_records,
+        monitored_protocols: config.monitored_protocols.clone(),
+        monitored_chains: config.monitored_chains.clone(),
+    }
+}

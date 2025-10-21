@@ -22,7 +22,7 @@ pub use storable::{
 };
 
 pub use apy::{
-    ProtocolApyInfo, ApyResponse,
+    ProtocolApyInfo, ApyResponse, ApyParserStatus,
 };
 
 pub use scheduler::{

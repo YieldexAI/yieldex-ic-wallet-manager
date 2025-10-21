@@ -74,6 +74,16 @@ type ApyResponse = record {
     rates: vec ProtocolApyInfo;
 };
 
+type ApyParserStatus = record {
+    enabled: bool;
+    interval_seconds: nat64;
+    timer_active: bool;
+    last_execution: opt nat64;
+    total_records: nat64;
+    monitored_protocols: vec text;
+    monitored_chains: vec nat64;
+};
+
 // 🆕 Recommendation Engine Types
 type Recommendation = record {
     from_protocol: text;
@@ -317,6 +327,7 @@ service : {
     "admin_stop_apy_parser": () -> (variant { Ok: text; Err: text });
     "admin_set_apy_parser_interval": (seconds: nat64) -> (variant { Ok: text; Err: text });
     "admin_trigger_apy_collection": () -> (variant { Ok: text; Err: text });
+    "admin_get_apy_parser_status": () -> (variant { Ok: ApyParserStatus; Err: text }) query;
     "admin_get_apy_history": (protocol: text, asset: text, chain_id: nat64, limit: opt nat64) -> (vec ApyHistoryRecord) query;
     "admin_get_all_positions": () -> (vec UserPosition) query;
     "admin_get_tracked_positions": () -> (vec UserPosition) query;
