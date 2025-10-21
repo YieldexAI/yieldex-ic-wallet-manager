@@ -1,274 +1,261 @@
 # APY Parser Module
 
-## 📋 Описание
+## 📋 Description
 
-APY Parser - это модуль для автоматического сбора, хранения и предоставления исторических данных по APY (Annual Percentage Yield) различных DeFi протоколов, а также управления позициями пользователей для автоматического ребалансирования.
+APY Parser is a module for automatic collection, storage, and provision of historical APY (Annual Percentage Yield) data from various DeFi protocols, as well as for managing user positions for automated rebalancing.
 
-## 🏗️ Архитектура
+## 🏗️ Architecture
 
-### Основные компоненты
+### Main Components
 
-1. **APY Collection Engine** - периодический сбор APY из протоколов
-2. **Position Manager** - управление позициями пользователей
-3. **Persistent Storage** - StableBTreeMap для хранения данных
-4. **Scheduler Integration** - интеграция с модулем автоматического ребалансирования
+1. **APY Collection Engine** - periodically collects APY from protocols
+2. **Position Manager** - manages user positions
+3. **Persistent Storage** - StableBTreeMap is used to store data
+4. **Scheduler Integration** - integration with the automatic rebalancing module
 
-### Структуры данных
+### Data Structures
 
 #### UserPosition
 ```rust
 pub struct UserPosition {
-    pub position_id: String,           // Уникальный ID позиции
-    pub user_principal: Principal,     // Principal пользователя
-    pub user_evm_address: String,      // EVM адрес пользователя
-    pub permissions_id: String,        // ID разрешений
+    pub position_id: String,           // Unique position ID
+    pub user_principal: Principal,     // User's principal
+    pub user_evm_address: String,      // User's EVM address
+    pub permissions_id: String,        // Permissions ID
     pub protocol: String,              // "AAVE" | "COMPOUND"
     pub asset: String,                 // "USDC", "LINK", etc.
-    pub token_address: String,         // EVM адрес токена
-    pub chain_id: u64,                 // ID сети (42161 = Arbitrum)
-    pub position_size: String,         // Размер позиции (human-readable)
-    pub tracked: bool,                 // Отслеживать для ребалансировки?
-    pub added_at: u64,                 // Timestamp создания
-    pub updated_at: u64,               // Timestamp обновления
+    pub token_address: String,         // Token EVM address
+    pub chain_id: u64,                 // Chain ID (42161 = Arbitrum)
+    pub position_size: String,         // Position size (human-readable)
+    pub tracked: bool,                 // Track for auto rebalancing?
+    pub added_at: u64,                 // Creation timestamp
+    pub updated_at: u64,               // Update timestamp
 }
 ```
 
 #### ApyHistoryRecord
 ```rust
 pub struct ApyHistoryRecord {
-    pub record_id: String,             // Уникальный ID записи
+    pub record_id: String,             // Unique record ID
     pub protocol: String,              // "AAVE" | "COMPOUND"
     pub asset: String,                 // "USDC", "LINK", etc.
-    pub token_address: String,         // EVM адрес токена
-    pub chain_id: u64,                 // ID сети
-    pub apy: f64,                      // APY в процентах
-    pub timestamp: u64,                // Timestamp записи
+    pub token_address: String,         // Token EVM address
+    pub chain_id: u64,                 // Chain ID
+    pub apy: f64,                      // APY percent
+    pub timestamp: u64,                // Record timestamp
 }
 ```
 
 #### ApyParserConfig
 ```rust
 pub struct ApyParserConfig {
-    pub enabled: bool,                 // Включен ли сборщик
-    pub interval_seconds: u64,         // Интервал сбора (по умолчанию 900 = 15 минут)
-    pub last_execution: Option<u64>,  // Время последнего сбора
+    pub enabled: bool,                 // Collector enabled
+    pub interval_seconds: u64,         // Collection interval (default 900 = 15 minutes)
+    pub last_execution: Option<u64>,   // Last collection time
     pub monitored_protocols: Vec<String>, // ["AAVE", "COMPOUND"]
     pub monitored_chains: Vec<u64>,    // [42161, 11155111]
 }
 ```
 
-## 🗄️ Хранилища (StableBTreeMap)
+## 🗄️ Storage (StableBTreeMap)
 
 ### APY_HISTORY_MAP
-- **Ключ:** `record_id` (String)
-- **Значение:** `ApyHistoryRecord`
-- **Формат ключа:** `{protocol}:{chain_id}:{token_address}:{timestamp}`
-- **Пример:** `AAVE:42161:0xaf88d065e77c8cC2239327C5EDb3A432268e5831:1704067200000`
+- **Key:** `record_id` (String)
+- **Value:** `ApyHistoryRecord`
+- **Key format:** `{protocol}:{chain_id}:{token_address}:{timestamp}`
+- **Example:** `AAVE:42161:0xaf88d065e77c8cC2239327C5EDb3A432268e5831:1704067200000`
 
 ### USER_POSITIONS_MAP
-- **Ключ:** `position_id` (String)
-- **Значение:** `UserPosition`
-- **Формат ключа:** `pos_{timestamp_hex}{random_hex}`
-- **Пример:** `pos_0000018d1234abcd5678ef90`
+- **Key:** `position_id` (String)
+- **Value:** `UserPosition`
+- **Key format:** `pos_{timestamp_hex}{random_hex}`
+- **Example:** `pos_0000018d1234abcd5678ef90`
 
 ### REBALANCE_HISTORY_MAP
-- **Ключ:** `execution_id` (String)
-- **Значение:** `RebalanceExecution`
-- **Назначение:** История всех выполненных ребалансировок
+- **Key:** `execution_id` (String)
+- **Value:** `RebalanceExecution`
+- **Purpose:** History of all performed rebalances
 
-## 🔧 API Эндпоинты
+## 🔧 API Endpoints
 
-### Пользовательские API
+### User APIs
 
 #### `create_position`
-Создание новой позиции для отслеживания.
+Create a new position to track.
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend create_position '(
-  "permissions_id",      # ID разрешений пользователя
-  "AAVE",               # Протокол
-  "USDC",               # Символ токена
-  "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", # Адрес токена
-  42161,                # Chain ID (Arbitrum)
-  "1000",               # Размер позиции в USDC
-  true                  # Отслеживать для автоматического ребалансирования
+  "permissions_id",      # User's permissions ID
+  "AAVE",                # Protocol
+  "USDC",                # Token symbol
+  "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", # Token address
+  42161,                 # Chain ID (Arbitrum)
+  "1000",                # Position size in USDC
+  true                   # Track for automatic rebalancing
 )'
 ```
-
-**Возвращает:** `UserPosition`
+**Returns:** `UserPosition`
 
 #### `get_my_positions`
-Получение всех позиций текущего пользователя.
+Get all positions for current user.
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend get_my_positions
 ```
-
-**Возвращает:** `Vec<UserPosition>`
+**Returns:** `Vec<UserPosition>`
 
 #### `update_position`
-Обновление параметров позиции.
+Update the parameters for a position.
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend update_position '(
   "pos_0000018d1234abcd", # Position ID
-  opt "2000",             # Новый размер позиции (optional)
-  opt false               # Отключить отслеживание (optional)
+  opt "2000",             # New position size (optional)
+  opt false               # Disable tracking (optional)
 )'
 ```
-
-**Возвращает:** `Result<UserPosition, String>`
+**Returns:** `Result<UserPosition, String>`
 
 #### `delete_position`
-Удаление позиции.
+Delete a position.
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend delete_position '("pos_0000018d1234abcd")'
 ```
-
-**Возвращает:** `Result<bool, String>`
+**Returns:** `Result<bool, String>`
 
 #### `get_position`
-Получение конкретной позиции по ID (только если принадлежит вызывающему пользователю).
+Get a specific position by ID (only if owned by caller).
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend get_position '("pos_0000018d1234abcd")'
 ```
-
-**Возвращает:** `Result<UserPosition, String>`
+**Returns:** `Result<UserPosition, String>`
 
 ---
 
-### Админские API
+### Admin APIs
 
 #### `admin_init_apy_parser`
-Инициализация APY parser (для существующих канистеров, развернутых до добавления модуля).
+Initialize the APY parser (for existing canisters deployed before the module was added).
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend admin_init_apy_parser
 ```
-
-**Возвращает:** `Result<String, String>`
+**Returns:** `Result<String, String>`
 
 #### `admin_start_apy_parser`
-Запуск периодического сбора APY.
+Start periodic APY collection.
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend admin_start_apy_parser
 ```
-
-**Возвращает:** `Result<String, String>`
+**Returns:** `Result<String, String>`
 
 #### `admin_stop_apy_parser`
-Остановка сбора APY.
+Stop APY collection.
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend admin_stop_apy_parser
 ```
-
-**Возвращает:** `Result<String, String>`
+**Returns:** `Result<String, String>`
 
 #### `admin_set_apy_parser_interval`
-Настройка интервала сбора APY (в секундах).
+Set APY collection interval (in seconds).
 
 ```bash
-# Установить интервал 15 минут (900 секунд)
+# Set interval to 15 minutes (900 seconds)
 dfx canister call yieldex-ic-wallet-manager-backend admin_set_apy_parser_interval '(900)'
 
-# Установить интервал 1 час (3600 секунд)
+# Set interval to 1 hour (3600 seconds)
 dfx canister call yieldex-ic-wallet-manager-backend admin_set_apy_parser_interval '(3600)'
 ```
+**Returns:** `Result<String, String>`
 
-**Возвращает:** `Result<String, String>`
-
-**Ограничения:** Минимум 60 секунд
+**Restriction:** Minimum 60 seconds
 
 #### `admin_trigger_apy_collection`
-Ручной запуск сбора APY (не дожидаясь таймера).
+Manually trigger APY collection (regardless of timer).
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend admin_trigger_apy_collection
 ```
-
-**Возвращает:** `Result<String, String>`
+**Returns:** `Result<String, String>`
 
 #### `admin_get_apy_history`
-Получение истории APY для конкретного протокола/токена/сети.
+Get APY history for a specific protocol/token/network.
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend admin_get_apy_history '(
-  "AAVE",    # Протокол
-  "USDC",    # Токен
+  "AAVE",    # Protocol
+  "USDC",    # Token
   42161,     # Chain ID
-  opt 10     # Лимит записей (optional, по умолчанию 100)
+  opt 10     # Record limit (optional, default 100)
 )'
 ```
-
-**Возвращает:** `Vec<ApyHistoryRecord>` (отсортировано по убыванию timestamp)
+**Returns:** `Vec<ApyHistoryRecord>` (sorted by descending timestamp)
 
 #### `admin_get_all_positions`
-Получение всех позиций в системе (всех пользователей).
+Get all user positions in the system.
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend admin_get_all_positions
 ```
-
-**Возвращает:** `Vec<UserPosition>`
+**Returns:** `Vec<UserPosition>`
 
 #### `admin_get_tracked_positions`
-Получение только отслеживаемых позиций (tracked = true).
+Get only positions marked as tracked (tracked = true).
 
 ```bash
 dfx canister call yieldex-ic-wallet-manager-backend admin_get_tracked_positions
 ```
+**Returns:** `Vec<UserPosition>`
 
-**Возвращает:** `Vec<UserPosition>`
+## 🔄 Scheduler Integration
 
-## 🔄 Интеграция со Scheduler
+APY Parser is integrated with the automatic rebalancing module:
 
-APY Parser интегрирован с модулем автоматического ребалансирования:
-
-1. **Scheduler использует APY Parser для получения позиций:**
+1. **Scheduler uses APY Parser to get positions:**
    ```rust
    let tracked_positions = apy_parser::get_tracked_positions();
    ```
 
-2. **Scheduler использует кэшированные APY данные:**
+2. **Scheduler uses cached APY data:**
    ```rust
    let apy = apy_parser::get_latest_apy(protocol, asset, chain_id).await?;
    ```
-   - Сначала проверяет кэш в `APY_HISTORY_MAP`
-   - Если данных нет или они устарели, делает live запрос к протоколу
+   - First checks the cache in `APY_HISTORY_MAP`
+   - If unavailable or outdated, performs a live protocol query
 
-3. **История ребалансировок сохраняется в `REBALANCE_HISTORY_MAP`**
+3. **Rebalance history is saved in `REBALANCE_HISTORY_MAP`**
 
-## 🚀 Быстрый старт
+## 🚀 Quick Start
 
-### 1. Развертывание и инициализация
+### 1. Deploy & Initialize
 
 ```bash
-# Развернуть канистер
+# Deploy canister
 dfx deploy yieldex-ic-wallet-manager-backend
 
-# APY Parser автоматически инициализируется в init()
-# Но нужно запустить его вручную
+# APY Parser is auto-initialized in init()
+# But must be started manually
 dfx canister call yieldex-ic-wallet-manager-backend admin_start_apy_parser
 ```
 
-### 2. Настройка (опционально)
+### 2. Configuration (optional)
 
 ```bash
-# Установить интервал сбора APY (например, 30 минут)
+# Set APY collection interval (e.g., 30 minutes)
 dfx canister call yieldex-ic-wallet-manager-backend admin_set_apy_parser_interval '(1800)'
 ```
 
-### 3. Создание позиции пользователем
+### 3. Creating a user position
 
 ```bash
-# 1. Генерация EVM адреса (если еще не создан)
+# 1. Generate EVM address (if not already created)
 dfx canister call yieldex-ic-wallet-manager-backend generate_evm_address
 
-# 2. Создание разрешений (permissions)
+# 2. Create permissions
 dfx canister call yieldex-ic-wallet-manager-backend create_permissions '(record {
   chain_id = 42161;
   whitelisted_protocols = vec { record { name = "AAVE"; address = "0x794a61358D6845594F94dc1DB02A252b5b4814aD" } };
@@ -277,7 +264,7 @@ dfx canister call yieldex-ic-wallet-manager-backend create_permissions '(record 
   protocol_permissions = null;
 })'
 
-# 3. Создание позиции
+# 3. Create position
 dfx canister call yieldex-ic-wallet-manager-backend create_position '(
   "<permissions_id>",
   "AAVE",
@@ -289,73 +276,73 @@ dfx canister call yieldex-ic-wallet-manager-backend create_position '(
 )'
 ```
 
-### 4. Запуск scheduler для автоматического ребалансирования
+### 4. Start Scheduler for Automatic Rebalancing
 
 ```bash
-# Запустить scheduler
+# Start scheduler
 dfx canister call yieldex-ic-wallet-manager-backend admin_start_scheduler
 
-# Настроить порог APY для ребалансировки (например, 0.5%)
+# Set APY threshold for rebalancing (e.g., 0.5%)
 dfx canister call yieldex-ic-wallet-manager-backend admin_set_apy_threshold '(0.5)'
 ```
 
-## 📊 Мониторинг
+## 📊 Monitoring
 
-### Проверка статуса APY Parser
+### Check APY Parser Status
 
 ```bash
-# Посмотреть последние собранные данные
+# See latest collected data
 dfx canister call yieldex-ic-wallet-manager-backend admin_get_apy_history '("AAVE", "USDC", 42161, opt 5)'
 
-# Посмотреть все отслеживаемые позиции
+# List all tracked positions
 dfx canister call yieldex-ic-wallet-manager-backend admin_get_tracked_positions
 
-# Проверить статус scheduler (включает информацию о позициях)
+# Get scheduler status (includes positions info)
 dfx canister call yieldex-ic-wallet-manager-backend admin_get_scheduler_status
 ```
 
-### Ручная проверка APY
+### Manual APY Check
 
 ```bash
-# Получить текущий APY напрямую из протокола (admin only)
+# Get current APY directly from protocol (admin only)
 dfx canister call yieldex-ic-wallet-manager-backend get_current_apy '("USDC", 42161)'
 ```
 
-## 🔍 Поддерживаемые протоколы и токены
+## 🔍 Supported Protocols and Tokens
 
 ### AAVE V3
 
-| Сеть | Chain ID | Токены | Pool Address |
-|------|----------|---------|--------------|
-| Arbitrum | 42161 | USDC | 0x794a61358D6845594F94dc1DB02A252b5b4814aD |
-| Sepolia | 11155111 | USDC | 0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951 |
-| Base | 8453 | USDC | 0x794a61358D6845594F94dc1DB02A252b5b4814aD |
-| Optimism | 10 | USDC | 0x794a61358D6845594F94dc1DB02A252b5b4814aD |
+| Network   | Chain ID | Tokens | Pool Address |
+|-----------|----------|--------|--------------|
+| Arbitrum  | 42161    | USDC   | 0x794a61358D6845594F94dc1DB02A252b5b4814aD |
+| Sepolia   | 11155111 | USDC   | 0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951 |
+| Base      | 8453     | USDC   | 0x794a61358D6845594F94dc1DB02A252b5b4814aD |
+| Optimism  | 10       | USDC   | 0x794a61358D6845594F94dc1DB02A252b5b4814aD |
 
 ### Compound III
 
-| Сеть | Chain ID | Токены | Comet Address |
-|------|----------|---------|---------------|
-| Arbitrum | 42161 | USDC | 0x9c4ec768c28520b50860ea7a15bd7213a9ff58bf |
+| Network   | Chain ID | Tokens | Comet Address |
+|-----------|----------|--------|---------------|
+| Arbitrum  | 42161    | USDC   | 0x9c4ec768c28520b50860ea7a15bd7213a9ff58bf |
 
-## 🔐 Безопасность
+## 🔐 Security
 
-### Контроль доступа
+### Access Control
 
-- **Пользовательские эндпоинты:** Доступны только владельцу позиций
-- **Админские эндпоинты:** Проверка `is_admin()` через список `ADMIN_PRINCIPALS`
+- **User endpoints:** accessible only to position owner
+- **Admin endpoints:** `is_admin()` check via `ADMIN_PRINCIPALS` list
 
-### Валидация данных
+### Data Validation
 
-- Проверка ownership при обновлении/удалении позиций
-- Проверка permissions перед созданием позиции
-- Минимальный интервал сбора APY: 60 секунд
+- Ownership validation when updating/deleting positions
+- Permissions check before creating a position
+- Minimum APY collection interval: 60 seconds
 
-## 🐛 Отладка
+## 🐛 Debugging
 
-### Логирование
+### Logging
 
-APY Parser выводит подробные логи через `ic_cdk::println!`:
+APY Parser outputs detailed logs via `ic_cdk::println!`:
 
 ```
 📊 APY collection started at 1704067200000
@@ -369,78 +356,78 @@ APY Parser выводит подробные логи через `ic_cdk::printl
 ✅ APY collection completed
 ```
 
-### Распространенные ошибки
+### Common Errors
 
 **"Scheduler not initialized"**
-- Решение: Вызвать `admin_init_scheduler()` или `admin_init_apy_parser()`
+- Solution: Call `admin_init_scheduler()` or `admin_init_apy_parser()`
 
 **"Position ID cannot be empty"**
-- Решение: Убедиться что все обязательные поля заполнены при создании позиции
+- Solution: Ensure all required fields are filled when creating a position
 
 **"Interval must be at least 60 seconds"**
-- Решение: Установить интервал >= 60 секунд
+- Solution: Set interval >= 60 seconds
 
 **"Token X not found for protocol Y"**
-- Решение: Убедиться что токен поддерживается протоколом на данной сети
+- Solution: Ensure that the token is supported by the protocol on the given network
 
-## 📈 Производительность
+## 📈 Performance
 
-### Рекомендуемые настройки
+### Recommended Settings
 
-- **Интервал APY сбора:** 15-30 минут (900-1800 секунд)
-- **Интервал scheduler:** 1-2 часа (3600-7200 секунд)
-- **APY threshold для ребалансировки:** 0.5-1.0%
+- **APY collection interval:** 15-30 minutes (900-1800 seconds)
+- **Scheduler interval:** 1-2 hours (3600-7200 seconds)
+- **APY threshold for rebalancing:** 0.5-1.0%
 
-### Ограничения
+### Limitations
 
-- StableBTreeMap - unbounded для `UserPosition` и `ApyHistoryRecord`
-- Рекомендуется периодическая очистка старых APY записей (можно добавить админский endpoint)
+- StableBTreeMap - unbounded for `UserPosition` and `ApyHistoryRecord`
+- Periodic cleanup of old APY records is recommended (admin endpoint can be added)
 
-## 🔄 Обновление канистера
+## 🔄 Canister Upgrade
 
-APY Parser корректно обрабатывает обновления канистера:
+APY Parser correctly handles canister upgrades:
 
 ```rust
 #[post_upgrade]
 fn post_upgrade() {
-    // Stable memory автоматически сохраняется
+    // Stable memory is automatically preserved
 
-    // Восстанавливаются таймеры если были включены
+    // Timers are restored if they were enabled
     if apy_parser::is_apy_parser_enabled() {
         apy_parser::start_apy_parser_timer();
     }
 }
 ```
 
-## 📝 TODO / Будущие улучшения
+## 📝 TODO / Future Improvements
 
-- [ ] Добавить endpoint для очистки старых APY записей
-- [ ] Поддержка большего количества токенов (ETH, DAI, USDT)
-- [ ] Webhook уведомления при значительном изменении APY
-- [ ] Графический дашборд для мониторинга APY
-- [ ] Экспорт истории APY в CSV
-- [ ] Автоматическая детекция позиций из on-chain данных
+- [ ] Add endpoint to clean old APY records
+- [ ] Support for more tokens (ETH, DAI, USDT)
+- [ ] Webhook alerts for significant APY changes
+- [ ] Graphical monitoring dashboard for APY
+- [ ] Export APY history in CSV
+- [ ] Automatic position detection from on-chain data
 
-## 🤝 Интеграция с другими модулями
+## 🤝 Integration With Other Modules
 
 ### Scheduler Module
-- Использует `get_tracked_positions()` для получения позиций
-- Использует `get_latest_apy()` для принятия решений о ребалансировке
+- Uses `get_tracked_positions()` to get positions
+- Uses `get_latest_apy()` for rebalancing decisions
 
 ### Rebalance Module
-- История ребалансировок сохраняется в `REBALANCE_HISTORY_MAP`
-- Доступна через `admin_get_rebalance_history()`
+- Rebalance history is stored in `REBALANCE_HISTORY_MAP`
+- Available via `admin_get_rebalance_history()`
 
 ### Permissions Module
-- Проверка permissions при создании позиций
-- Валидация ownership
+- Permissions are checked when creating positions
+- Ownership is validated
 
-## 📚 Примеры использования
+## 📚 Usage Examples
 
-### Сценарий 1: Создание и отслеживание позиции
+### Scenario 1: Create and Track Position
 
 ```bash
-# 1. Создать позицию
+# 1. Create a position
 POSITION=$(dfx canister call yieldex-ic-wallet-manager-backend create_position '(
   "perm_123",
   "AAVE",
@@ -451,10 +438,10 @@ POSITION=$(dfx canister call yieldex-ic-wallet-manager-backend create_position '
   true
 )' | grep position_id | awk '{print $3}')
 
-# 2. Проверить позицию
+# 2. Check position
 dfx canister call yieldex-ic-wallet-manager-backend get_position "(\"$POSITION\")"
 
-# 3. Обновить размер позиции
+# 3. Update position size
 dfx canister call yieldex-ic-wallet-manager-backend update_position "(
   \"$POSITION\",
   opt \"7500\",
@@ -462,38 +449,38 @@ dfx canister call yieldex-ic-wallet-manager-backend update_position "(
 )"
 ```
 
-### Сценарий 2: Мониторинг APY
+### Scenario 2: APY Monitoring
 
 ```bash
-# Запускать каждый день для сбора данных
+# Run daily to collect data
 dfx canister call yieldex-ic-wallet-manager-backend admin_trigger_apy_collection
 
-# Получить историю за последние 24 часа (при интервале 15 минут = 96 записей)
+# Get history for last 24 hours (with 15-min interval = 96 records)
 dfx canister call yieldex-ic-wallet-manager-backend admin_get_apy_history '("AAVE", "USDC", 42161, opt 96)'
 ```
 
-### Сценарий 3: Анализ ребалансировок
+### Scenario 3: Rebalancing Analysis
 
 ```bash
-# Получить последние 10 ребалансировок
+# Get last 10 rebalancings
 dfx canister call yieldex-ic-wallet-manager-backend admin_get_rebalance_history '(opt 10)'
 
-# Получить ребалансировки конкретного пользователя
+# Get rebalancings for a specific user
 dfx canister call yieldex-ic-wallet-manager-backend admin_get_user_rebalance_history '(
   principal "hfugy-ahqdz-5sbki-vky4l-xceci-3se5z-2cb7k-jxjuq-qidax-gd53f-nqe",
   opt 20
 )'
 ```
 
-## 🔗 Связанные файлы
+## 🔗 Related Files
 
-- **Модуль:** [src/yieldex-ic-wallet-manager-backend/src/services/apy_parser.rs](src/yieldex-ic-wallet-manager-backend/src/services/apy_parser.rs)
-- **Типы:** [src/yieldex-ic-wallet-manager-backend/src/types/scheduler.rs](src/yieldex-ic-wallet-manager-backend/src/types/scheduler.rs)
-- **API:** [src/yieldex-ic-wallet-manager-backend/src/lib.rs](src/yieldex-ic-wallet-manager-backend/src/lib.rs) (строки 1258-1449)
-- **Интеграция:** [src/yieldex-ic-wallet-manager-backend/src/services/scheduler.rs](src/yieldex-ic-wallet-manager-backend/src/services/scheduler.rs)
+- **Module:** [src/yieldex-ic-wallet-manager-backend/src/services/apy_parser.rs](src/yieldex-ic-wallet-manager-backend/src/services/apy_parser.rs)
+- **Types:** [src/yieldex-ic-wallet-manager-backend/src/types/scheduler.rs](src/yieldex-ic-wallet-manager-backend/src/types/scheduler.rs)
+- **API:** [src/yieldex-ic-wallet-manager-backend/src/lib.rs](src/yieldex-ic-wallet-manager-backend/src/lib.rs) (lines 1258-1449)
+- **Integration:** [src/yieldex-ic-wallet-manager-backend/src/services/scheduler.rs](src/yieldex-ic-wallet-manager-backend/src/services/scheduler.rs)
 
 ---
 
-**Версия:** 1.0.0
-**Дата:** 2025-01-21
-**Статус:** ✅ Production Ready
+**Version:** 1.0.0  
+**Date:** 2025-01-21  
+**Status:** ✅ Production Ready
