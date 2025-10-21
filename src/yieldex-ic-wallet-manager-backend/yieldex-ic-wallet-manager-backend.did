@@ -97,16 +97,18 @@ type SchedulerConfig = record {
     enabled: bool;
     interval_seconds: nat64;
     apy_threshold_percent: float64;
+    min_position_size: text;
+    last_execution: opt nat64;
+    created_at: nat64;
+    updated_at: nat64;
 };
 
 type SchedulerStatus = record {
-    enabled: bool;
-    interval_seconds: nat64;
-    apy_threshold_percent: float64;
-    last_run_timestamp: opt nat64;
-    total_executions: nat64;
-    successful_executions: nat64;
-    failed_executions: nat64;
+    config: SchedulerConfig;
+    timer_active: bool;
+    total_positions_tracked: nat64;
+    total_rebalances_executed: nat64;
+    last_execution_result: opt text;
 };
 
 type RebalanceExecution = record {
@@ -129,7 +131,7 @@ type RebalanceExecution = record {
 
 // 🆕 User Position Types
 type UserPosition = record {
-    id: text;
+    position_id: text;
     user_principal: principal;
     user_evm_address: text;
     permissions_id: text;
@@ -139,7 +141,7 @@ type UserPosition = record {
     chain_id: nat64;
     position_size: text;
     tracked: bool;
-    created_at: nat64;
+    added_at: nat64;
     updated_at: nat64;
 };
 
