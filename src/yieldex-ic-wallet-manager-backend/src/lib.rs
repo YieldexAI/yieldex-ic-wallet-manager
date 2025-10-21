@@ -1413,6 +1413,15 @@ fn admin_get_apy_history(
     apy_parser::get_apy_history(&protocol, &asset, chain_id, limit)
 }
 
+/// Get all APY history (Public query method)
+#[query]
+fn get_apy_history_all(limit: Option<u64>) -> Vec<ApyHistoryRecord> {
+    ic_cdk::println!("📜 [PUBLIC] Getting all APY history");
+    ic_cdk::println!("📝 Requested by principal: {}", ic_cdk::caller());
+
+    apy_parser::get_all_apy_history(limit)
+}
+
 /// Get all positions in the system (Admin only)
 #[query]
 fn admin_get_all_positions() -> Vec<UserPosition> {

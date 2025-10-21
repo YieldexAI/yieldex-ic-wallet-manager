@@ -399,6 +399,26 @@ pub fn get_apy_history(
     })
 }
 
+/// Get all APY history records (no filtering)
+pub fn get_all_apy_history(limit: Option<u64>) -> Vec<ApyHistoryRecord> {
+    ic_cdk::println!("📜 Getting all APY history records (limit: {:?})", limit);
+
+    APY_HISTORY_MAP.with(|map| {
+        let borrowed = map.borrow();
+        let mut all_records: Vec<ApyHistoryRecord> = borrowed
+            .iter()
+            .map(|(_, record)| record.0.clone())
+            .collect();
+
+        // Sort by timestamp descending (most recent first)
+        all_records.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+        // Apply limit (default 100 to prevent overwhelming responses)
+        let limit = limit.unwrap_or(100) as usize;
+        all_records.into_iter().take(limit).collect()
+    })
+}
+
 // =============================================================================
 // User Position Management
 // =============================================================================
