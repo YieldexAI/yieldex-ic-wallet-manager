@@ -13,3 +13,4 @@ pub mod aave;
 pub mod rpc_service;
 pub mod compound;
 pub mod rebalance;
+pub mod scheduler;

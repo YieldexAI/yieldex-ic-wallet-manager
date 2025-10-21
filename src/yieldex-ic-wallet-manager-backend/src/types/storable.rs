@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 use super::permissions::Permissions;
+use super::scheduler::{UserPosition, ApyHistoryRecord, RebalanceExecution};
 
 // --- Storable Wrapper Types ---
 
@@ -51,6 +52,59 @@ impl Storable for StorablePermissions {
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
         let permissions: Permissions = candid::decode_one(&bytes).expect("Failed to decode permissions");
         StorablePermissions(permissions)
+    }
+
+    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Unbounded;
+}
+
+// --- Scheduler Storable Wrappers ---
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct StorableUserPosition(pub UserPosition);
+
+impl Storable for StorableUserPosition {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        let bytes = candid::encode_one(&self.0).expect("Failed to encode UserPosition");
+        Cow::Owned(bytes)
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        let position: UserPosition = candid::decode_one(&bytes).expect("Failed to decode UserPosition");
+        StorableUserPosition(position)
+    }
+
+    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Unbounded;
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct StorableApyHistoryRecord(pub ApyHistoryRecord);
+
+impl Storable for StorableApyHistoryRecord {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        let bytes = candid::encode_one(&self.0).expect("Failed to encode ApyHistoryRecord");
+        Cow::Owned(bytes)
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        let record: ApyHistoryRecord = candid::decode_one(&bytes).expect("Failed to decode ApyHistoryRecord");
+        StorableApyHistoryRecord(record)
+    }
+
+    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Unbounded;
+}
+
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+pub struct StorableRebalanceExecution(pub RebalanceExecution);
+
+impl Storable for StorableRebalanceExecution {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        let bytes = candid::encode_one(&self.0).expect("Failed to encode RebalanceExecution");
+        Cow::Owned(bytes)
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        let execution: RebalanceExecution = candid::decode_one(&bytes).expect("Failed to decode RebalanceExecution");
+        StorableRebalanceExecution(execution)
     }
 
     const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Unbounded;

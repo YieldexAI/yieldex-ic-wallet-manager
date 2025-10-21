@@ -16,13 +16,14 @@ use types::{
     ProtocolPermission, Recommendation, ExecutionResult,
     StorablePrincipal, StorableString, StorablePermissions,
     ProtocolApyInfo, ApyResponse,
+    SchedulerConfig, SchedulerStatus, RebalanceExecution, // 🆕 Scheduler types
 };
 
 // Services module
 mod services;
 use services::{
-    get_balance::get_balance, 
-    get_balance_link::get_balance_link, 
+    get_balance::get_balance,
+    get_balance_link::get_balance_link,
     get_balance_usdc::get_balance_usdc,
     transfer_link::{transfer_link, transfer_link_human},
     send_eth::{send_eth, send_eth_human},
@@ -34,7 +35,8 @@ use services::{
     aave::{supply_link_to_aave_with_permissions, withdraw_link_from_aave_with_permissions, get_aave_link_balance, supply_to_aave_with_permissions, withdraw_from_aave_with_permissions, get_apy as get_aave_apy}, // 🆕 AAVE Service Methods (Sprint 2)
     compound::{supply_usdc_to_compound_with_permissions, withdraw_usdc_from_compound_with_permissions, get_compound_usdc_balance, get_apy as get_compound_apy}, // 🆕 Compound Service Methods
     rebalance::{execute_recommendation as execute_recommendation_impl, validate_recommendation}, // 🆕 Rebalance Service Methods
-    rpc_service::{is_supported_chain, get_supported_chains_info} // 🆕 RPC Service imports
+    rpc_service::{is_supported_chain, get_supported_chains_info}, // 🆕 RPC Service imports
+    scheduler, // 🆕 Scheduler module
 };
 
 // --- Types ---
@@ -1108,6 +1110,110 @@ async fn get_current_apy(token: String, chain_id: u64) -> Result<ApyResponse, St
     })
 }
 
+// --- Scheduler Admin API ---
+
+/// Get current scheduler configuration (Admin only)
+#[query]
+fn admin_get_scheduler_config() -> Result<SchedulerConfig, String> {
+    is_admin()?;
+    ic_cdk::println!("🔍 [ADMIN] Getting scheduler configuration");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    scheduler::get_scheduler_config()
+}
+
+/// Update scheduler configuration (Admin only)
+#[update]
+fn admin_update_scheduler_config(config: SchedulerConfig) -> Result<SchedulerConfig, String> {
+    is_admin()?;
+    ic_cdk::println!("🔧 [ADMIN] Updating scheduler configuration");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    scheduler::update_scheduler_config(config)
+}
+
+/// Start the scheduler (Admin only)
+#[update]
+fn admin_start_scheduler() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("▶️ [ADMIN] Starting scheduler");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    scheduler::enable_scheduler()
+}
+
+/// Stop the scheduler (Admin only)
+#[update]
+fn admin_stop_scheduler() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("⏸️ [ADMIN] Stopping scheduler");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    scheduler::disable_scheduler()
+}
+
+/// Set scheduler interval in seconds (Admin only)
+#[update]
+fn admin_set_scheduler_interval(seconds: u64) -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("⏱️ [ADMIN] Setting scheduler interval to {} seconds", seconds);
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    scheduler::set_scheduler_interval(seconds)
+}
+
+/// Set APY threshold percentage (Admin only)
+#[update]
+fn admin_set_apy_threshold(percent: f64) -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("📊 [ADMIN] Setting APY threshold to {}%", percent);
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    scheduler::set_apy_threshold(percent)
+}
+
+/// Manually trigger scheduler execution (Admin only)
+#[update]
+async fn admin_trigger_rebalance() -> Result<Vec<RebalanceExecution>, String> {
+    is_admin()?;
+    ic_cdk::println!("🔨 [ADMIN] Manually triggering scheduler execution");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    scheduler::trigger_manual_execution().await
+}
+
+/// Get scheduler status and statistics (Admin only)
+#[query]
+fn admin_get_scheduler_status() -> Result<SchedulerStatus, String> {
+    is_admin()?;
+    ic_cdk::println!("📊 [ADMIN] Getting scheduler status");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    scheduler::get_scheduler_status()
+}
+
+/// Get rebalance execution history (Admin only)
+#[query]
+fn admin_get_rebalance_history(limit: Option<u64>) -> Result<Vec<RebalanceExecution>, String> {
+    is_admin()?;
+    ic_cdk::println!("📜 [ADMIN] Getting rebalance history (limit: {:?})", limit);
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    Ok(scheduler::get_rebalance_history(limit))
+}
+
+/// Get rebalance history for a specific user (Admin only)
+#[query]
+fn admin_get_user_rebalance_history(user: Principal, limit: Option<u64>) -> Result<Vec<RebalanceExecution>, String> {
+    is_admin()?;
+    ic_cdk::println!("📜 [ADMIN] Getting rebalance history for user: {}", user);
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    Ok(scheduler::get_user_rebalance_history(user, limit))
+}
+
+// --- Helper Functions ---
+
 fn get_ecdsa_key_name() -> String {
     #[allow(clippy::option_env_unwrap)]
     let dfx_network = option_env!("DFX_NETWORK").unwrap_or("local");
@@ -1122,7 +1228,7 @@ async fn create_icp_signer() -> Result<IcpSigner, String> {
     let user = ic_cdk::caller();
     let derivation_path = vec![user.as_slice().to_vec()];
     let ecdsa_key_name = get_ecdsa_key_name();
-    
+
     IcpSigner::new(derivation_path, &ecdsa_key_name, None)
         .await
         .map_err(|e| format!("Failed to create ICP signer: {}", e))
@@ -1132,14 +1238,31 @@ async fn create_icp_signer() -> Result<IcpSigner, String> {
 
 #[init]
 fn init() {
-    // Initialization logic if needed (e.g., setting owners, initial config)
-    ic_cdk::println!("SmartWallet Manager Initialized.");
+    ic_cdk::println!("🚀 Initializing SmartWallet Manager with Scheduler...");
+
+    // Initialize scheduler
+    scheduler::init_scheduler();
+
+    // Note: Timer will not auto-start - admin must enable it via admin_start_scheduler
+    ic_cdk::println!("✅ SmartWallet Manager Initialized.");
+    ic_cdk::println!("ℹ️ Scheduler initialized but not started. Use admin_start_scheduler() to enable.");
 }
 
 #[post_upgrade]
 fn post_upgrade() {
+    ic_cdk::println!("🔄 Upgrading SmartWallet Manager...");
+
     // Stable memory is automatically preserved, no specific restore needed for StableBTreeMap
-    ic_cdk::println!("SmartWallet Manager Upgraded.");
+
+    // Restore scheduler timer if it was enabled before upgrade
+    if scheduler::is_scheduler_enabled() {
+        ic_cdk::println!("🔄 Scheduler was enabled, restarting timer...");
+        scheduler::start_scheduler_timer();
+    } else {
+        ic_cdk::println!("ℹ️ Scheduler is disabled, timer not started.");
+    }
+
+    ic_cdk::println!("✅ SmartWallet Manager Upgraded.");
 }
 
 // --- Candid export ---
