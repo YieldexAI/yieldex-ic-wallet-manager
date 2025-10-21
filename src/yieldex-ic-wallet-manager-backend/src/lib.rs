@@ -1112,6 +1112,22 @@ async fn get_current_apy(token: String, chain_id: u64) -> Result<ApyResponse, St
 
 // --- Scheduler Admin API ---
 
+/// Initialize scheduler (Admin only) - for existing canisters that were deployed before scheduler
+#[update]
+fn admin_init_scheduler() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("🔧 [ADMIN] Manually initializing scheduler");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    // Check if already initialized
+    if let Ok(_config) = scheduler::get_scheduler_config() {
+        return Err("Scheduler already initialized. Use admin_update_scheduler_config to modify.".to_string());
+    }
+
+    scheduler::init_scheduler();
+    Ok("Scheduler initialized successfully. Use admin_start_scheduler to enable.".to_string())
+}
+
 /// Get current scheduler configuration (Admin only)
 #[query]
 fn admin_get_scheduler_config() -> Result<SchedulerConfig, String> {
