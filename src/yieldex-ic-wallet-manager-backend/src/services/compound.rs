@@ -475,3 +475,49 @@ fn get_usdc_address(chain_id: u64) -> Result<&'static str, String> {
         _ => Err(format!("USDC not configured for chain_id: {}", chain_id))
     }
 }
+
+/// Get current supply APY from Compound on-chain
+/// Returns APY as a percentage string (e.g., "5.23")
+pub async fn get_apy(chain_id: u64) -> Result<String, String> {
+    ic_cdk::println!("🔍 Getting Compound APY on chain {}", chain_id);
+
+    // 1. Get Compound Comet contract address
+    let compound_address = get_compound_comet_address(chain_id)?;
+    ic_cdk::println!("✅ Using Compound Comet address: {}", compound_address);
+
+    // 2. Create read-only provider (no signer needed)
+    let rpc_service = get_rpc_service_by_chain_id(chain_id)?;
+    let config = IcpConfig::new(rpc_service);
+    let provider = ProviderBuilder::new().on_icp(config);
+
+    // 3. Create Compound Comet contract instance
+    let compound_contract = CompoundComet::new(compound_address.parse::<Address>().unwrap(), &provider);
+
+    // 4. Get current utilization
+    ic_cdk::println!("📞 Calling getUtilization...");
+    let utilization = compound_contract.getUtilization().call().await
+        .map_err(|e| format!("Failed to get utilization: {}", e))?;
+    ic_cdk::println!("✅ Current utilization: {}", utilization._0);
+
+    // 5. Get supply rate for current utilization
+    ic_cdk::println!("📞 Calling getSupplyRate with utilization {}...", utilization._0);
+    let supply_rate = compound_contract.getSupplyRate(utilization._0).call().await
+        .map_err(|e| format!("Failed to get supply rate: {}", e))?;
+
+    ic_cdk::println!("✅ Supply rate (per-second, 18 decimals): {}", supply_rate._0);
+
+    // 6. Convert per-second rate to annual APY
+    // Compound III returns rate in 18-decimal fixed-point format (1e18), per-second
+    // APR% = (rate / 1e18) * seconds_per_year * 100
+    // For APY with compounding: APY = (1 + rate_per_second)^seconds_per_year - 1
+    // We use linear approximation (APR) for simplicity: APY% ≈ (rate / 1e18) * seconds_per_year * 100
+    // seconds_per_year = 31,536,000 (365 * 24 * 60 * 60)
+    const SECONDS_PER_YEAR: f64 = 31_536_000.0;
+    let rate_per_second = (supply_rate._0 as f64) / 1e18;
+    let apr_percent = rate_per_second * SECONDS_PER_YEAR * 100.0;
+
+    let apy_string = format!("{:.2}", apr_percent);
+    ic_cdk::println!("🎯 Compound APR (linear approximation): {}%", apy_string);
+
+    Ok(apy_string)
+}

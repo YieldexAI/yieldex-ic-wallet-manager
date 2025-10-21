@@ -3,6 +3,7 @@
 pub mod permissions;
 pub mod recommendation;
 pub mod storable;
+pub mod apy;
 
 // Re-export commonly used types for convenience
 pub use permissions::{
@@ -16,4 +17,8 @@ pub use recommendation::{
 
 pub use storable::{
     StorablePrincipal, StorableString, StorablePermissions,
+};
+
+pub use apy::{
+    ProtocolApyInfo, ApyResponse,
 };

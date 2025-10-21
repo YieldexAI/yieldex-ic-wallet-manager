@@ -15,6 +15,7 @@ use types::{
     Permissions, CreatePermissionsRequest, UpdatePermissionsRequest,
     ProtocolPermission, Recommendation, ExecutionResult,
     StorablePrincipal, StorableString, StorablePermissions,
+    ProtocolApyInfo, ApyResponse,
 };
 
 // Services module
@@ -30,8 +31,8 @@ use services::{
     sign_message::{sign_message, sign_message_with_address, sign_hash},
     wrap_eth::{wrap_eth, wrap_eth_human, unwrap_weth, unwrap_weth_human},
     permissions::{is_permissions_owner, verify_protocol_permission, add_protocol_permission, set_daily_usage},
-    aave::{supply_link_to_aave_with_permissions, withdraw_link_from_aave_with_permissions, get_aave_link_balance, supply_to_aave_with_permissions, withdraw_from_aave_with_permissions}, // 🆕 AAVE Service Methods (Sprint 2)
-    compound::{supply_usdc_to_compound_with_permissions, withdraw_usdc_from_compound_with_permissions, get_compound_usdc_balance}, // 🆕 Compound Service Methods
+    aave::{supply_link_to_aave_with_permissions, withdraw_link_from_aave_with_permissions, get_aave_link_balance, supply_to_aave_with_permissions, withdraw_from_aave_with_permissions, get_apy as get_aave_apy}, // 🆕 AAVE Service Methods (Sprint 2)
+    compound::{supply_usdc_to_compound_with_permissions, withdraw_usdc_from_compound_with_permissions, get_compound_usdc_balance, get_apy as get_compound_apy}, // 🆕 Compound Service Methods
     rebalance::{execute_recommendation as execute_recommendation_impl, validate_recommendation}, // 🆕 Rebalance Service Methods
     rpc_service::{is_supported_chain, get_supported_chains_info} // 🆕 RPC Service imports
 };
@@ -43,6 +44,11 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 const PRINCIPAL_MAP_MEMORY_ID: MemoryId = MemoryId::new(0);
 const PERMISSIONS_MAP_MEMORY_ID: MemoryId = MemoryId::new(1);
 
+// Admin principals - hardcoded list of authorized administrators
+const ADMIN_PRINCIPALS: &[&str] = &[
+    "hfugy-ahqdz-5sbki-vky4l-xceci-3se5z-2cb7k-jxjuq-qidax-gd53f-nqe", // Your principal
+];
+
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
@@ -53,7 +59,7 @@ thread_local! {
             MEMORY_MANAGER.with(|m| m.borrow().get(PRINCIPAL_MAP_MEMORY_ID)),
         )
     );
-    
+
     // Map PermissionsId -> Permissions
     static PERMISSIONS_MAP: RefCell<StableBTreeMap<StorableString, StorablePermissions, Memory>> = RefCell::new(
         StableBTreeMap::init(
@@ -68,6 +74,18 @@ thread_local! {
 fn now() -> u64 {
     // Returns milliseconds since Unix epoch
     ic_cdk::api::time() / 1_000_000
+}
+
+// Check if caller is an admin
+fn is_admin() -> Result<(), String> {
+    let caller = ic_cdk::caller();
+    let caller_str = caller.to_text();
+
+    if ADMIN_PRINCIPALS.contains(&caller_str.as_str()) {
+        Ok(())
+    } else {
+        Err(format!("Unauthorized: Only admins can call this function. Caller: {}", caller_str))
+    }
 }
 
 // Normalize Ethereum address to lowercase without 0x prefix
@@ -985,6 +1003,109 @@ fn get_supported_chains() -> Vec<(u64, String)> {
 #[query]
 fn is_chain_supported(chain_id: u64) -> bool {
     is_supported_chain(chain_id)
+}
+
+// --- Admin API ---
+
+/// Helper function to get token address from symbol or address string
+fn resolve_token_address(token: &str, chain_id: u64) -> Result<Address, String> {
+    // Check if it's already an address (starts with 0x and correct length)
+    if token.starts_with("0x") && token.len() == 42 {
+        token.parse::<Address>()
+            .map_err(|_| format!("Invalid token address format: {}", token))
+    } else {
+        // Resolve common token symbols to addresses based on chain_id
+        use services::rpc_service::{SEPOLIA_CHAIN_ID, ARBITRUM_CHAIN_ID, BASE_CHAIN_ID, OPTIMISM_CHAIN_ID};
+
+        let token_upper = token.to_uppercase();
+        match (token_upper.as_str(), chain_id) {
+            // USDC addresses
+            ("USDC", ARBITRUM_CHAIN_ID) => "0xaf88d065e77c8cc2239327c5edb3a432268e5831".parse().map_err(|_| "Parse error".to_string()),
+            ("USDC", BASE_CHAIN_ID) => "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".parse().map_err(|_| "Parse error".to_string()),
+            ("USDC", OPTIMISM_CHAIN_ID) => "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85".parse().map_err(|_| "Parse error".to_string()),
+            ("USDC", SEPOLIA_CHAIN_ID) => "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238".parse().map_err(|_| "Parse error".to_string()),
+
+
+            _ => Err(format!("Token '{}' not supported on chain_id {}", token, chain_id))
+        }
+    }
+}
+
+/// Get current APY rates for a token across AAVE and Compound protocols (Admin only)
+///
+/// # Arguments
+/// * `token` - Token address (e.g., "0xaf88d065e77c8cc2239327c5edb3a432268e5831") or symbol (e.g., "USDC")
+/// * `chain_id` - Chain ID to check rates on (e.g., 42161 for Arbitrum)
+///
+/// # Returns
+/// ApyResponse containing rates from both AAVE and Compound where available
+#[update]
+async fn get_current_apy(token: String, chain_id: u64) -> Result<ApyResponse, String> {
+    // Check admin access
+    is_admin()?;
+
+    ic_cdk::println!("🔍 [ADMIN] Getting APY rates for token '{}' on chain_id {}", token, chain_id);
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    // Validate chain is supported
+    if !is_supported_chain(chain_id) {
+        return Err(format!("Unsupported chain_id: {}. Supported chains: {:?}",
+                          chain_id, get_supported_chains_info()));
+    }
+
+    // Resolve token address
+    let token_address = resolve_token_address(&token, chain_id)?;
+    ic_cdk::println!("✅ Resolved token to address: 0x{:x}", token_address);
+
+    let mut rates = Vec::new();
+
+    // Try to get AAVE APY
+    ic_cdk::println!("📊 Fetching AAVE APY...");
+    match get_aave_apy(token_address, chain_id).await {
+        Ok(apy) => {
+            ic_cdk::println!("✅ AAVE APY: {}%", apy);
+            rates.push(ProtocolApyInfo {
+                protocol: "AAVE".to_string(),
+                apy,
+                chain_id,
+            });
+        }
+        Err(e) => {
+            ic_cdk::println!("⚠️ AAVE APY not available: {}", e);
+        }
+    }
+
+    // Try to get Compound APY (only on Arbitrum for USDC market)
+    if chain_id == services::rpc_service::ARBITRUM_CHAIN_ID {
+        ic_cdk::println!("📊 Fetching Compound APY...");
+        match get_compound_apy(chain_id).await {
+            Ok(apy) => {
+                ic_cdk::println!("✅ Compound APY: {}%", apy);
+                rates.push(ProtocolApyInfo {
+                    protocol: "Compound".to_string(),
+                    apy,
+                    chain_id,
+                });
+            }
+            Err(e) => {
+                ic_cdk::println!("⚠️ Compound APY not available: {}", e);
+            }
+        }
+    } else {
+        ic_cdk::println!("ℹ️ Compound is only available on Arbitrum (chain_id: 42161)");
+    }
+
+    if rates.is_empty() {
+        return Err(format!("No APY rates available for token '{}' on chain_id {}", token, chain_id));
+    }
+
+    ic_cdk::println!("🎉 Successfully retrieved {} APY rate(s)", rates.len());
+
+    Ok(ApyResponse {
+        token: format!("0x{:x}", token_address),
+        chain_id,
+        rates,
+    })
 }
 
 fn get_ecdsa_key_name() -> String {

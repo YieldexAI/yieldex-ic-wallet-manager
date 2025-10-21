@@ -715,7 +715,7 @@ pub async fn supply_link_to_aave_with_permissions(
     ).await
 }
 
-/// Legacy wrapper function for backward compatibility - Withdraw LINK from AAVE on Sepolia  
+/// Legacy wrapper function for backward compatibility - Withdraw LINK from AAVE on Sepolia
 pub async fn withdraw_link_from_aave_with_permissions_legacy(
     amount_human: String,
     permissions_id: String,
@@ -730,4 +730,41 @@ pub async fn withdraw_link_from_aave_with_permissions_legacy(
         user_principal,
         SEPOLIA_CHAIN_ID
     ).await
+}
+
+/// Get current supply APY for a specific asset from AAVE on-chain
+/// Returns APY as a percentage string (e.g., "5.23")
+pub async fn get_apy(token_address: Address, chain_id: u64) -> Result<String, String> {
+    ic_cdk::println!("🔍 Getting AAVE APY for token 0x{:x} on chain {}", token_address, chain_id);
+
+    // 1. Get AAVE configuration for the chain
+    let aave_config = get_aave_config(chain_id)?;
+    ic_cdk::println!("✅ Got AAVE config for chain {}", chain_id);
+
+    // 2. Create read-only provider (no signer needed)
+    let rpc_service = get_rpc_service_by_chain_id(chain_id)?;
+    let config = IcpConfig::new(rpc_service);
+    let provider = ProviderBuilder::new().on_icp(config);
+
+    // 3. Create Pool contract instance
+    let pool_contract = AavePool::new(aave_config.pool_address, provider);
+
+    // 4. Call getReserveData to get current liquidity rate
+    ic_cdk::println!("📞 Calling getReserveData for token 0x{:x}...", token_address);
+    let reserve_data = pool_contract.getReserveData(token_address).call().await
+        .map_err(|e| format!("Failed to get reserve data: {}", e))?;
+
+    // 5. Extract currentLiquidityRate (in Ray units, 1e27)
+    let liquidity_rate_ray = reserve_data._0.currentLiquidityRate;
+    ic_cdk::println!("✅ Current liquidity rate (Ray): {}", liquidity_rate_ray);
+
+    // 6. Convert Ray to APY percentage
+    // Simplified formula: APY% ≈ (rate / 1e25) gives percentage with 2 decimal precision
+    // More accurate would be: APY = (e^(rate/1e27) - 1) * 100, but we use simplified linear approximation
+    let apy_percent = (liquidity_rate_ray as f64) / 1e25;
+
+    let apy_string = format!("{:.2}", apy_percent);
+    ic_cdk::println!("🎯 AAVE APY: {}%", apy_string);
+
+    Ok(apy_string)
 }

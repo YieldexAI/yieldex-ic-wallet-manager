@@ -60,6 +60,19 @@ type UpdatePermissionsRequest = record {
     transfer_limits: opt vec TransferLimit;
 };
 
+// 🆕 APY Types for admin operations
+type ProtocolApyInfo = record {
+    protocol: text;
+    apy: text;
+    chain_id: nat64;
+};
+
+type ApyResponse = record {
+    token: text;
+    chain_id: nat64;
+    rates: vec ProtocolApyInfo;
+};
+
 service : {
     // Generates and returns the EVM address associated with the caller's Principal ID.
     // If an address already exists for the caller, it returns the existing address.
@@ -184,5 +197,8 @@ service : {
     // 🆕 Chain support operations
     "get_supported_chains": () -> (vec record { nat64; text }) query;
     "is_chain_supported": (chain_id: nat64) -> (bool) query;
+
+    // 🆕 Admin operations
+    "get_current_apy": (token: text, chain_id: nat64) -> (variant { Ok: ApyResponse; Err: text });
 
 }
