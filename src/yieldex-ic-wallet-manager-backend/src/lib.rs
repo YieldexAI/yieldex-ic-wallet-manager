@@ -15,8 +15,10 @@ use types::{
     Permissions, CreatePermissionsRequest, UpdatePermissionsRequest,
     ProtocolPermission, Recommendation, ExecutionResult,
     StorablePrincipal, StorableString, StorablePermissions,
+    StorableUserPosition, StorableApyHistoryRecord, StorableRebalanceExecution,
     ProtocolApyInfo, ApyResponse,
-    SchedulerConfig, SchedulerStatus, RebalanceExecution, // 🆕 Scheduler types
+    SchedulerConfig, SchedulerStatus, RebalanceExecution,
+    UserPosition, ApyHistoryRecord, // 🆕 APY Parser types
 };
 
 // Services module
@@ -37,6 +39,7 @@ use services::{
     rebalance::{execute_recommendation as execute_recommendation_impl, validate_recommendation}, // 🆕 Rebalance Service Methods
     rpc_service::{is_supported_chain, get_supported_chains_info}, // 🆕 RPC Service imports
     scheduler, // 🆕 Scheduler module
+    apy_parser, // 🆕 APY Parser module
 };
 
 // --- Types ---
@@ -45,6 +48,9 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 // --- State ---
 const PRINCIPAL_MAP_MEMORY_ID: MemoryId = MemoryId::new(0);
 const PERMISSIONS_MAP_MEMORY_ID: MemoryId = MemoryId::new(1);
+const APY_HISTORY_MEMORY_ID: MemoryId = MemoryId::new(2);
+const USER_POSITIONS_MEMORY_ID: MemoryId = MemoryId::new(3);
+const REBALANCE_HISTORY_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 // Admin principals - hardcoded list of authorized administrators
 const ADMIN_PRINCIPALS: &[&str] = &[
@@ -66,6 +72,27 @@ thread_local! {
     static PERMISSIONS_MAP: RefCell<StableBTreeMap<StorableString, StorablePermissions, Memory>> = RefCell::new(
         StableBTreeMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(PERMISSIONS_MAP_MEMORY_ID)),
+        )
+    );
+
+    // Map RecordId -> APY History Record
+    pub static APY_HISTORY_MAP: RefCell<StableBTreeMap<StorableString, StorableApyHistoryRecord, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(APY_HISTORY_MEMORY_ID)),
+        )
+    );
+
+    // Map PositionId -> User Position
+    pub static USER_POSITIONS_MAP: RefCell<StableBTreeMap<StorableString, StorableUserPosition, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(USER_POSITIONS_MEMORY_ID)),
+        )
+    );
+
+    // Map ExecutionId -> Rebalance Execution
+    pub static REBALANCE_HISTORY_MAP: RefCell<StableBTreeMap<StorableString, StorableRebalanceExecution, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(REBALANCE_HISTORY_MEMORY_ID)),
         )
     );
 }
@@ -1228,6 +1255,199 @@ fn admin_get_user_rebalance_history(user: Principal, limit: Option<u64>) -> Resu
     Ok(scheduler::get_user_rebalance_history(user, limit))
 }
 
+// --- User Position Management API ---
+
+/// Create a new position for automatic tracking and rebalancing
+#[update]
+async fn create_position(
+    permissions_id: String,
+    protocol: String,
+    asset: String,
+    token_address: String,
+    chain_id: u64,
+    position_size: String,
+    tracked: bool,
+) -> Result<UserPosition, String> {
+    let caller = ic_cdk::caller();
+
+    ic_cdk::println!("🆕 Creating position for user: {}", caller);
+
+    // Get user's EVM address
+    let user_evm_address = get_evm_address()?;
+
+    // Verify permissions ownership
+    is_permissions_owner(&permissions_id, caller)?;
+
+    // Create the position
+    apy_parser::add_user_position(
+        caller,
+        user_evm_address,
+        permissions_id,
+        protocol,
+        asset,
+        token_address,
+        chain_id,
+        position_size,
+        tracked,
+    ).await
+}
+
+/// Get all positions for the current user
+#[query]
+fn get_my_positions() -> Vec<UserPosition> {
+    let caller = ic_cdk::caller();
+    ic_cdk::println!("📋 Getting positions for user: {}", caller);
+
+    apy_parser::get_user_positions(caller)
+}
+
+/// Update position tracking status or size
+#[update]
+fn update_position(
+    position_id: String,
+    position_size: Option<String>,
+    tracked: Option<bool>,
+) -> Result<UserPosition, String> {
+    let caller = ic_cdk::caller();
+
+    ic_cdk::println!("🔄 Updating position {} for user: {}", position_id, caller);
+
+    apy_parser::update_user_position(position_id, caller, position_size, tracked)
+}
+
+/// Delete a position
+#[update]
+fn delete_position(position_id: String) -> Result<bool, String> {
+    let caller = ic_cdk::caller();
+
+    ic_cdk::println!("🗑️ Deleting position {} for user: {}", position_id, caller);
+
+    apy_parser::delete_user_position(position_id, caller)
+}
+
+/// Get a specific position by ID (only if owned by caller)
+#[query]
+fn get_position(position_id: String) -> Result<UserPosition, String> {
+    let caller = ic_cdk::caller();
+
+    let position = apy_parser::get_position_by_id(position_id)?;
+
+    // Verify ownership
+    if position.user_principal != caller {
+        return Err("You do not own this position".to_string());
+    }
+
+    Ok(position)
+}
+
+// --- APY Parser Admin API ---
+
+/// Initialize APY parser (Admin only)
+#[update]
+fn admin_init_apy_parser() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("🔧 [ADMIN] Manually initializing APY parser");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    apy_parser::init_apy_parser();
+    Ok("APY parser initialized successfully. Use admin_start_apy_parser to enable.".to_string())
+}
+
+/// Start APY collection (Admin only)
+#[update]
+fn admin_start_apy_parser() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("▶️ [ADMIN] Starting APY parser");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    apy_parser::enable_apy_parser()
+}
+
+/// Stop APY collection (Admin only)
+#[update]
+fn admin_stop_apy_parser() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("⏸️ [ADMIN] Stopping APY parser");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    apy_parser::disable_apy_parser()
+}
+
+/// Set APY collection interval (Admin only)
+#[update]
+fn admin_set_apy_parser_interval(seconds: u64) -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("⏱️ [ADMIN] Setting APY parser interval to {} seconds", seconds);
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    apy_parser::set_apy_parser_interval(seconds)
+}
+
+/// Manually trigger APY collection (Admin only)
+#[update]
+async fn admin_trigger_apy_collection() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("🔨 [ADMIN] Manually triggering APY collection");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    apy_parser::trigger_manual_apy_collection().await
+}
+
+/// Get APY history for a protocol/asset/chain (Admin only)
+#[query]
+fn admin_get_apy_history(
+    protocol: String,
+    asset: String,
+    chain_id: u64,
+    limit: Option<u64>,
+) -> Vec<ApyHistoryRecord> {
+    // Admin check
+    if let Err(e) = is_admin() {
+        ic_cdk::println!("❌ Admin check failed: {}", e);
+        return vec![];
+    }
+
+    ic_cdk::println!("📜 [ADMIN] Getting APY history for {} {} on chain {}", protocol, asset, chain_id);
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    apy_parser::get_apy_history(&protocol, &asset, chain_id, limit)
+}
+
+/// Get all positions in the system (Admin only)
+#[query]
+fn admin_get_all_positions() -> Vec<UserPosition> {
+    // Admin check
+    if let Err(e) = is_admin() {
+        ic_cdk::println!("❌ Admin check failed: {}", e);
+        return vec![];
+    }
+
+    ic_cdk::println!("📋 [ADMIN] Getting all positions");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    USER_POSITIONS_MAP.with(|map| {
+        map.borrow()
+            .iter()
+            .map(|(_, position)| position.0.clone())
+            .collect()
+    })
+}
+
+/// Get all tracked positions (Admin only)
+#[query]
+fn admin_get_tracked_positions() -> Vec<UserPosition> {
+    // Admin check
+    if let Err(e) = is_admin() {
+        ic_cdk::println!("❌ Admin check failed: {}", e);
+        return vec![];
+    }
+
+    ic_cdk::println!("📋 [ADMIN] Getting tracked positions");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    apy_parser::get_tracked_positions()
+}
+
 // --- Helper Functions ---
 
 fn get_ecdsa_key_name() -> String {
@@ -1254,14 +1474,18 @@ async fn create_icp_signer() -> Result<IcpSigner, String> {
 
 #[init]
 fn init() {
-    ic_cdk::println!("🚀 Initializing SmartWallet Manager with Scheduler...");
+    ic_cdk::println!("🚀 Initializing SmartWallet Manager...");
 
     // Initialize scheduler
     scheduler::init_scheduler();
 
-    // Note: Timer will not auto-start - admin must enable it via admin_start_scheduler
+    // Initialize APY parser
+    apy_parser::init_apy_parser();
+
+    // Note: Timers will not auto-start - admin must enable them
     ic_cdk::println!("✅ SmartWallet Manager Initialized.");
     ic_cdk::println!("ℹ️ Scheduler initialized but not started. Use admin_start_scheduler() to enable.");
+    ic_cdk::println!("ℹ️ APY Parser initialized but not started. Use admin_start_apy_parser() to enable.");
 }
 
 #[post_upgrade]
@@ -1276,6 +1500,14 @@ fn post_upgrade() {
         scheduler::start_scheduler_timer();
     } else {
         ic_cdk::println!("ℹ️ Scheduler is disabled, timer not started.");
+    }
+
+    // Restore APY parser timer if it was enabled before upgrade
+    if apy_parser::is_apy_parser_enabled() {
+        ic_cdk::println!("🔄 APY Parser was enabled, restarting timer...");
+        apy_parser::start_apy_parser_timer();
+    } else {
+        ic_cdk::println!("ℹ️ APY Parser is disabled, timer not started.");
     }
 
     ic_cdk::println!("✅ SmartWallet Manager Upgraded.");

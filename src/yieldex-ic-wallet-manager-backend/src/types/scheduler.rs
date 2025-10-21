@@ -60,7 +60,7 @@ pub struct SchedulerStatus {
 // =============================================================================
 
 /// User's position in a DeFi protocol
-/// This will be stored in a future database to track all user positions
+/// This will be stored in a database to track all user positions
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct UserPosition {
     /// Unique identifier for this position
@@ -69,14 +69,20 @@ pub struct UserPosition {
     /// User who owns this position
     pub user_principal: Principal,
 
+    /// EVM address of the user (cached for convenience)
+    pub user_evm_address: String,
+
     /// Permissions ID associated with this position
     pub permissions_id: String,
 
     /// Protocol where the position is held ("AAVE" | "COMPOUND")
     pub protocol: String,
 
-    /// Asset type (e.g., "USDC")
+    /// Asset symbol/ticker (e.g., "USDC")
     pub asset: String,
+
+    /// Token EVM address
+    pub token_address: String,
 
     /// Chain ID where the position exists
     pub chain_id: u64,
@@ -87,8 +93,11 @@ pub struct UserPosition {
     /// Whether this position should be tracked for auto-rebalancing
     pub tracked: bool,
 
+    /// Timestamp when position was added
+    pub added_at: u64,
+
     /// Last time this position was updated
-    pub last_updated: u64,
+    pub updated_at: u64,
 }
 
 // =============================================================================
@@ -96,7 +105,7 @@ pub struct UserPosition {
 // =============================================================================
 
 /// Historical APY record for a protocol
-/// This will be stored in a future database to track APY over time
+/// This will be stored in a database to track APY over time
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct ApyHistoryRecord {
     /// Unique identifier for this record
@@ -105,8 +114,11 @@ pub struct ApyHistoryRecord {
     /// Protocol name ("AAVE" | "COMPOUND")
     pub protocol: String,
 
-    /// Asset symbol (e.g., "USDC")
+    /// Asset symbol/ticker (e.g., "USDC")
     pub asset: String,
+
+    /// Token EVM address
+    pub token_address: String,
 
     /// Chain ID
     pub chain_id: u64,

@@ -6,8 +6,9 @@ use std::time::Duration;
 use crate::types::{
     SchedulerConfig, SchedulerStatus, UserPosition,
     RebalanceExecution, SchedulerExecutionSummary, Recommendation,
-    RecommendationType,
+    RecommendationType, StorableRebalanceExecution,
 };
+use crate::{REBALANCE_HISTORY_MAP, StorableString};
 
 // =============================================================================
 // Global State (will be integrated into lib.rs)
@@ -19,10 +20,6 @@ thread_local! {
 
     /// Active timer ID for the scheduler
     static SCHEDULER_TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(None);
-
-    /// Temporary in-memory storage for rebalance history
-    /// (In production, this will be StableBTreeMap in lib.rs)
-    static REBALANCE_HISTORY: RefCell<Vec<RebalanceExecution>> = RefCell::new(Vec::new());
 }
 
 // =============================================================================
@@ -170,8 +167,11 @@ async fn execute_scheduler_tick() {
                 summary.execution_ids.push(execution.execution_id.clone());
 
                 // Store execution in history
-                REBALANCE_HISTORY.with(|history| {
-                    history.borrow_mut().push(execution);
+                REBALANCE_HISTORY_MAP.with(|map| {
+                    map.borrow_mut().insert(
+                        StorableString(execution.execution_id.clone()),
+                        StorableRebalanceExecution(execution)
+                    );
                 });
             },
             Ok(None) => {
@@ -323,48 +323,20 @@ fn generate_recommendation(
 // Mock / Temporary Functions (will be replaced with DB queries)
 // =============================================================================
 
-/// Get all tracked positions (MOCK - will query USER_POSITIONS_MAP)
+/// Get all tracked positions
 fn get_tracked_positions() -> Vec<UserPosition> {
-    ic_cdk::println!("⚠️ Using mock positions - USER_POSITIONS DB not implemented yet");
+    ic_cdk::println!("📋 Getting tracked positions from database...");
 
-    // Return empty vector for now
-    // In production: query USER_POSITIONS_MAP and filter by tracked=true
-    vec![]
+    // Query USER_POSITIONS_MAP and filter by tracked=true
+    crate::services::apy_parser::get_tracked_positions()
 }
 
-/// Get latest APY for a protocol (calls real protocol APY functions)
+/// Get latest APY for a protocol (uses APY parser with fallback to live queries)
 async fn get_latest_apy(protocol: &str, asset: &str, chain_id: u64) -> Result<f64, String> {
-    ic_cdk::println!("  Fetching real-time APY for {} on {}", protocol, asset);
+    ic_cdk::println!("  Getting APY for {} {} on chain {}", protocol, asset, chain_id);
 
-    match protocol {
-        "AAVE" => {
-            // Get USDC address for chain
-            let token_address = match chain_id {
-                42161 => { // Arbitrum
-                    "0xaf88d065e77c8cC2239327C5EDb3A432268e5831".parse()
-                        .map_err(|_| "Invalid address")?
-                },
-                11155111 => { // Sepolia
-                    "0x94a9D9AC8a22534E3FaCa9954e183B2c3736704F".parse()
-                        .map_err(|_| "Invalid address")?
-                },
-                _ => return Err(format!("Unsupported chain_id: {}", chain_id))
-            };
-
-            let apy_str = crate::services::aave::get_apy(token_address, chain_id).await?;
-            apy_str.parse::<f64>()
-                .map_err(|_| format!("Failed to parse AAVE APY: {}", apy_str))
-        },
-        "COMPOUND" => {
-            if chain_id != 42161 {
-                return Err("Compound only available on Arbitrum".to_string());
-            }
-            let apy_str = crate::services::compound::get_apy(chain_id).await?;
-            apy_str.parse::<f64>()
-                .map_err(|_| format!("Failed to parse Compound APY: {}", apy_str))
-        },
-        _ => Err(format!("Unknown protocol: {}", protocol))
-    }
+    // Use APY parser which will check cache first, then fall back to live query
+    crate::services::apy_parser::get_latest_apy(protocol, asset, chain_id).await
 }
 
 /// Get chain name from chain ID
@@ -519,9 +491,17 @@ pub async fn trigger_manual_execution() -> Result<Vec<RebalanceExecution>, Strin
     execute_scheduler_tick().await;
 
     // Return recent executions from this tick
-    REBALANCE_HISTORY.with(|history| {
-        let all = history.borrow().clone();
-        let recent: Vec<_> = all.into_iter().rev().take(10).collect();
+    REBALANCE_HISTORY_MAP.with(|map| {
+        let borrowed = map.borrow();
+        let mut all: Vec<RebalanceExecution> = borrowed
+            .iter()
+            .map(|(_, exec)| exec.0.clone())
+            .collect();
+
+        // Sort by timestamp descending
+        all.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+        let recent: Vec<_> = all.into_iter().take(10).collect();
         Ok(recent)
     })
 }
@@ -536,10 +516,21 @@ pub fn get_scheduler_status() -> Result<SchedulerStatus, String> {
 
     let timer_active = SCHEDULER_TIMER_ID.with(|id| id.borrow().is_some());
 
-    let total_rebalances = REBALANCE_HISTORY.with(|h| h.borrow().len() as u64);
+    let total_rebalances = REBALANCE_HISTORY_MAP.with(|map| map.borrow().len() as u64);
 
-    let last_result = REBALANCE_HISTORY.with(|h| {
-        h.borrow().last().map(|exec| {
+    let total_positions_tracked = crate::services::apy_parser::get_tracked_positions().len() as u64;
+
+    let last_result = REBALANCE_HISTORY_MAP.with(|map| {
+        let borrowed = map.borrow();
+        let mut all: Vec<RebalanceExecution> = borrowed
+            .iter()
+            .map(|(_, exec)| exec.0.clone())
+            .collect();
+
+        // Sort by timestamp descending
+        all.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+        all.first().map(|exec| {
             format!("ID: {}, Status: {}, User: {}",
                 exec.execution_id, exec.result.status, exec.user_principal)
         })
@@ -548,7 +539,7 @@ pub fn get_scheduler_status() -> Result<SchedulerStatus, String> {
     Ok(SchedulerStatus {
         config,
         timer_active,
-        total_positions_tracked: 0, // Will be from USER_POSITIONS count
+        total_positions_tracked,
         total_rebalances_executed: total_rebalances,
         last_execution_result: last_result,
     })
@@ -556,24 +547,38 @@ pub fn get_scheduler_status() -> Result<SchedulerStatus, String> {
 
 /// Get rebalance history (most recent first)
 pub fn get_rebalance_history(limit: Option<u64>) -> Vec<RebalanceExecution> {
-    REBALANCE_HISTORY.with(|history| {
-        let all = history.borrow().clone();
-        let mut sorted = all;
-        sorted.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    REBALANCE_HISTORY_MAP.with(|map| {
+        let borrowed = map.borrow();
+        let mut all: Vec<RebalanceExecution> = borrowed
+            .iter()
+            .map(|(_, exec)| exec.0.clone())
+            .collect();
+
+        // Sort by timestamp descending
+        all.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
 
         let limit = limit.unwrap_or(100) as usize;
-        sorted.into_iter().take(limit).collect()
+        all.into_iter().take(limit).collect()
     })
 }
 
 /// Get rebalance history for specific user
 pub fn get_user_rebalance_history(user: Principal, limit: Option<u64>) -> Vec<RebalanceExecution> {
-    REBALANCE_HISTORY.with(|history| {
-        let all = history.borrow().clone();
-        let mut user_history: Vec<_> = all.into_iter()
-            .filter(|exec| exec.user_principal == user)
+    REBALANCE_HISTORY_MAP.with(|map| {
+        let borrowed = map.borrow();
+        let mut user_history: Vec<RebalanceExecution> = borrowed
+            .iter()
+            .filter_map(|(_, exec)| {
+                let e = exec.0.clone();
+                if e.user_principal == user {
+                    Some(e)
+                } else {
+                    None
+                }
+            })
             .collect();
 
+        // Sort by timestamp descending
         user_history.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
 
         let limit = limit.unwrap_or(50) as usize;
