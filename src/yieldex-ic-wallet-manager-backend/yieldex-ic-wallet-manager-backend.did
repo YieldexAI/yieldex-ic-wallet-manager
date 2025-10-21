@@ -150,7 +150,7 @@ type ApyHistoryRecord = record {
     asset: text;
     token_address: text;
     chain_id: nat64;
-    apy: text;
+    apy: float64;
     timestamp: nat64;
 };
 
@@ -321,5 +321,6 @@ service : {
 
     // Public APY query methods
     "get_apy_history_all": (limit: opt nat64) -> (vec ApyHistoryRecord) query;
+    "get_latest_apy": (protocol: text, asset: text, chain_id: nat64) -> (variant { Ok: float64; Err: text });
 
 }

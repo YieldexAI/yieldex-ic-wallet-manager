@@ -1422,6 +1422,16 @@ fn get_apy_history_all(limit: Option<u64>) -> Vec<ApyHistoryRecord> {
     apy_parser::get_all_apy_history(limit)
 }
 
+/// Get latest APY for a protocol/asset/chain combination (Public method)
+/// Returns cached APY if available, otherwise fetches live from protocol
+#[update]
+async fn get_latest_apy(protocol: String, asset: String, chain_id: u64) -> Result<f64, String> {
+    ic_cdk::println!("📊 [PUBLIC] Getting latest APY for {} {} on chain {}", protocol, asset, chain_id);
+    ic_cdk::println!("📝 Requested by principal: {}", ic_cdk::caller());
+
+    apy_parser::get_latest_apy(&protocol, &asset, chain_id).await
+}
+
 /// Get all positions in the system (Admin only)
 #[query]
 fn admin_get_all_positions() -> Vec<UserPosition> {
