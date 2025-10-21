@@ -35,9 +35,10 @@ impl Storable for StorableString {
         StorableString(String::from_utf8(bytes.into_owned()).expect("Invalid UTF-8 for string"))
     }
 
-    // Assuming max EVM address hex length (0x + 40 hex chars) = 42 bytes
-    // Add some buffer
-    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Bounded { max_size: 64, is_fixed_size: false };
+    // Max size increased to 128 bytes to accommodate APY record IDs
+    // Format: "PROTOCOL:CHAIN_ID:TOKEN_ADDRESS:TIMESTAMP" (e.g., 67 bytes)
+    // Also accommodates EVM addresses (42 bytes) and other use cases
+    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Bounded { max_size: 128, is_fixed_size: false };
 }
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
