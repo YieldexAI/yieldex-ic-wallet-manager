@@ -53,7 +53,6 @@ impl Default for ApyParserConfig {
             monitored_protocols: vec!["AAVE".to_string(), "COMPOUND".to_string()],
             monitored_chains: vec![
                 crate::services::rpc_service::ARBITRUM_CHAIN_ID,
-                crate::services::rpc_service::SEPOLIA_CHAIN_ID,
             ],
         }
     }
