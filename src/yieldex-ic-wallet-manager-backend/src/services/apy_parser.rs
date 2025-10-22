@@ -57,7 +57,7 @@ impl Default for ApyParserConfig {
             monitored_chains: vec![
                 crate::services::rpc_service::ARBITRUM_CHAIN_ID,
             ],
-            auto_sync_positions: false, // Disabled by default for safety
+            auto_sync_positions: true, // Enabled by default to track user positions
         }
     }
 }

@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use alloy::{
     network::EthereumWallet,
     primitives::{address, Address, U256},
@@ -13,10 +11,7 @@ use crate::{PRINCIPAL_TO_ADDRESS_MAP, StorablePrincipal};
 use crate::services::rpc_service::{get_rpc_service_by_chain_id, SEPOLIA_CHAIN_ID, BASE_CHAIN_ID, OPTIMISM_CHAIN_ID, ARBITRUM_CHAIN_ID};
 use crate::services::permissions::{is_permissions_owner, verify_protocol_permission, set_daily_usage};
 use crate::services::get_balance_link::get_balance_link;
-
-thread_local! {
-    static AAVE_NONCE: RefCell<Option<u64>> = const { RefCell::new(None) };
-}
+use crate::services::nonce_manager::{get_next_nonce, reserve_nonce, commit_nonce, rollback_nonce, invalidate_cache};
 
 // AAVE V3 chain configuration
 #[derive(Clone)]
@@ -153,22 +148,12 @@ pub async fn supply_to_aave_with_permissions(
     ic_cdk::println!("✅ Step 7: Ensuring {} allowance for AAVE Pool...", token_symbol);
     ensure_token_allowance_for_aave(&provider, token_address, amount_wei, address, &aave_config).await?;
     ic_cdk::println!("✅ Step 7 Complete: {} allowance confirmed for AAVE Pool", token_symbol);
-    
+
     // 7. Handle nonce management
     ic_cdk::println!("✅ Step 7: Getting transaction nonce...");
-    let maybe_nonce = AAVE_NONCE.with_borrow(|maybe_nonce| {
-        maybe_nonce.map(|nonce| nonce + 1)
-    });
-
-    let nonce = if let Some(nonce) = maybe_nonce {
-        ic_cdk::println!("✅ Step 7: Using cached nonce: {}", nonce);
-        nonce
-    } else {
-        let fresh_nonce = provider.get_transaction_count(address).await
-            .map_err(|e| format!("Failed to get nonce: {}", e))?;
-        ic_cdk::println!("✅ Step 7: Got fresh nonce from network: {}", fresh_nonce);
-        fresh_nonce
-    };
+    let nonce = get_next_nonce(address, &provider, chain_id).await?;
+    reserve_nonce(address, chain_id, nonce);
+    ic_cdk::println!("✅ Step 7 Complete: Reserved nonce {} for transaction", nonce);
     
     // 8. Execute supply to AAVE
     ic_cdk::println!("✅ Step 8: Preparing AAVE supply transaction...");
@@ -201,7 +186,11 @@ pub async fn supply_to_aave_with_permissions(
         Ok(builder) => {
             let tx_hash = *builder.tx_hash();
             ic_cdk::println!("✅ Step 8 Complete: Transaction sent with hash: {:?}", tx_hash);
-            
+
+            // Transaction successfully sent - commit nonce
+            // Even if transaction reverts in blockchain, nonce is consumed
+            commit_nonce(address, chain_id, nonce);
+
             ic_cdk::println!("✅ Step 9: Waiting for transaction confirmation...");
             let tx_response = provider.get_transaction_by_hash(tx_hash).await
                 .map_err(|e| {
@@ -219,11 +208,7 @@ pub async fn supply_to_aave_with_permissions(
                     ic_cdk::println!("  - Gas Used: {:?}", tx.gas);
                     ic_cdk::println!("  - Nonce: {}", tx.nonce);
                     
-                    // Update nonce cache
-                    AAVE_NONCE.with_borrow_mut(|nonce| {
-                        *nonce = Some(tx.nonce);
-                    });
-                    ic_cdk::println!("✅ Step 10: Nonce cache updated to {}", tx.nonce);
+                    // Nonce already committed after send() succeeded
                     
                     // Update daily usage
                     ic_cdk::println!("✅ Step 11: Updating daily usage limits...");
@@ -262,9 +247,18 @@ pub async fn supply_to_aave_with_permissions(
         }
         Err(e) => {
             ic_cdk::println!("❌ Step 8 Failed: Supply transaction failed: {:?}", e);
-            
-            // Try to decode specific AAVE errors
+
+            // Transaction failed to send - rollback nonce
+            rollback_nonce(address, chain_id, nonce);
+
+            // Check for nonce too low error
             let error_str = e.to_string();
+            if error_str.contains("nonce too low") {
+                ic_cdk::println!("⚠️ Nonce too low error - invalidating cache");
+                invalidate_cache(address, chain_id);
+            }
+
+            // Try to decode specific AAVE errors
             let decoded_error = if error_str.contains("execution reverted") {
                 "AAVE execution reverted - possible causes: insufficient allowance, reserve frozen, invalid parameters, or gas limit too low"
             } else if error_str.contains("RESERVE_FROZEN") {
@@ -278,10 +272,10 @@ pub async fn supply_to_aave_with_permissions(
             } else {
                 "Unknown AAVE error"
             };
-            
+
             ic_cdk::println!("🔍 Decoded error: {}", decoded_error);
             ic_cdk::println!("💡 Suggestion: Try with smaller amount (0.01 LINK) or check if AAVE Pool is operational");
-            
+
             Err(format!("Supply transaction failed: {:?} | Decoded: {}", e, decoded_error))
         }
     }
@@ -346,20 +340,10 @@ pub async fn withdraw_from_aave_with_permissions(
     
     // 7. Handle nonce management
     ic_cdk::println!("✅ Step 7: Getting transaction nonce...");
-    let maybe_nonce = AAVE_NONCE.with_borrow(|maybe_nonce| {
-        maybe_nonce.map(|nonce| nonce + 1)
-    });
+    let nonce = get_next_nonce(address, &provider, chain_id).await?;
+    reserve_nonce(address, chain_id, nonce);
+    ic_cdk::println!("✅ Step 7 Complete: Reserved nonce {} for transaction", nonce);
 
-    let nonce = if let Some(nonce) = maybe_nonce {
-        ic_cdk::println!("✅ Step 7: Using cached nonce: {}", nonce);
-        nonce
-    } else {
-        let fresh_nonce = provider.get_transaction_count(address).await
-            .map_err(|e| format!("Failed to get nonce: {}", e))?;
-        ic_cdk::println!("✅ Step 7: Got fresh nonce from network: {}", fresh_nonce);
-        fresh_nonce
-    };
-    
     // 8. Execute withdraw from AAVE
     ic_cdk::println!("✅ Step 8: Preparing AAVE withdraw transaction...");
     let pool_address = aave_config.pool_address;
@@ -392,7 +376,11 @@ pub async fn withdraw_from_aave_with_permissions(
         Ok(builder) => {
             let tx_hash = *builder.tx_hash();
             ic_cdk::println!("✅ Step 8 Complete: Transaction sent with hash: {:?}", tx_hash);
-            
+
+            // Transaction successfully sent - commit nonce
+            // Even if transaction reverts in blockchain, nonce is consumed
+            commit_nonce(address, chain_id, nonce);
+
             ic_cdk::println!("✅ Step 9: Waiting for transaction confirmation...");
             let tx_response = provider.get_transaction_by_hash(tx_hash).await
                 .map_err(|e| {
@@ -410,11 +398,7 @@ pub async fn withdraw_from_aave_with_permissions(
                     ic_cdk::println!("  - Gas Used: {:?}", tx.gas);
                     ic_cdk::println!("  - Nonce: {}", tx.nonce);
                     
-                    // Update nonce cache
-                    AAVE_NONCE.with_borrow_mut(|nonce| {
-                        *nonce = Some(tx.nonce);
-                    });
-                    ic_cdk::println!("✅ Step 10: Nonce cache updated to {}", tx.nonce);
+                    // Nonce already committed after send() succeeded
                     
                     // Update daily usage
                     ic_cdk::println!("✅ Step 11: Updating daily usage limits...");
@@ -669,19 +653,19 @@ async fn ensure_token_allowance_for_aave(
     
     if current_allowance._0 < amount {
         ic_cdk::println!("⚠️ Insufficient allowance, need to approve more tokens...");
-        // Always get fresh nonce for approval to avoid conflicts with other transactions
-        ic_cdk::println!("🔧 Getting fresh nonce for token approval transaction...");
-        let nonce = provider.get_transaction_count(user_address).await
-            .map_err(|e| format!("Failed to get nonce for approval: {}", e))?;
-        ic_cdk::println!("🔧 Got fresh nonce for approval: {}", nonce);
-        
+        // Get nonce for approval transaction
+        ic_cdk::println!("🔧 Getting nonce for token approval transaction...");
+        let nonce = get_next_nonce(user_address, provider, aave_config.chain_id).await?;
+        reserve_nonce(user_address, aave_config.chain_id, nonce);
+        ic_cdk::println!("🔧 Reserved nonce {} for approval", nonce);
+
         // Increase allowance
         ic_cdk::println!("🚀 Sending token approval transaction...");
         ic_cdk::println!("📋 Approval Parameters:");
         ic_cdk::println!("  - Spender (AAVE Pool): 0x{:x}", pool_address);
         ic_cdk::println!("  - Amount: {} wei", amount);
         ic_cdk::println!("  - Nonce: {}", nonce);
-        
+
         match token_contract
             .approve(pool_address, amount)
             .nonce(nonce)
@@ -693,17 +677,15 @@ async fn ensure_token_allowance_for_aave(
             Ok(builder) => {
                 let tx_hash = *builder.tx_hash();
                 ic_cdk::println!("✅ Token approval transaction sent: {:?}", tx_hash);
-                
+
+                // Transaction sent - commit nonce
+                commit_nonce(user_address, aave_config.chain_id, nonce);
+
                 let tx_response = provider.get_transaction_by_hash(tx_hash).await
                     .map_err(|e| format!("Failed to get approve transaction: {}", e))?;
 
                 match tx_response {
                     Some(tx) => {
-                        // Update nonce cache
-                        AAVE_NONCE.with_borrow_mut(|nonce| {
-                            *nonce = Some(tx.nonce);
-                        });
-                        
                         ic_cdk::println!("✅ Token approved for AAVE Pool successfully: {:?}", tx_hash);
                         ic_cdk::println!("📋 Approval confirmed in block: {:?}", tx.block_number);
                     }
@@ -715,6 +697,16 @@ async fn ensure_token_allowance_for_aave(
                 }
             }
             Err(e) => {
+                // Transaction failed to send - rollback nonce
+                rollback_nonce(user_address, aave_config.chain_id, nonce);
+
+                // Check for nonce too low error
+                let error_str = e.to_string();
+                if error_str.contains("nonce too low") {
+                    ic_cdk::println!("⚠️ Nonce too low error - invalidating cache");
+                    invalidate_cache(user_address, aave_config.chain_id);
+                }
+
                 let error_msg = format!("Approve transaction failed: {:?}", e);
                 ic_cdk::println!("❌ {}", error_msg);
                 return Err(error_msg);

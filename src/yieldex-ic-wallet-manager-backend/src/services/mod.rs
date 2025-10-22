@@ -16,3 +16,4 @@ pub mod rebalance;
 pub mod scheduler;
 pub mod apy_parser;
 pub mod position_sync;
+pub mod nonce_manager;
