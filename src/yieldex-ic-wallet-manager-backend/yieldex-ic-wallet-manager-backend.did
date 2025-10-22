@@ -345,6 +345,9 @@ service : {
     "admin_set_apy_parser_interval": (seconds: nat64) -> (variant { Ok: text; Err: text });
     "admin_trigger_apy_collection": () -> (variant { Ok: text; Err: text });
     "admin_get_apy_parser_status": () -> (variant { Ok: ApyParserStatus; Err: text }) query;
+    "admin_enable_position_auto_sync": () -> (variant { Ok: text; Err: text });
+    "admin_disable_position_auto_sync": () -> (variant { Ok: text; Err: text });
+    "admin_update_position_permissions_id": (position_id: text, new_permissions_id: text) -> (variant { Ok: UserPosition; Err: text });
     "admin_get_apy_history": (protocol: text, asset: text, chain_id: nat64, limit: opt nat64) -> (vec ApyHistoryRecord) query;
     "admin_get_all_positions": () -> (vec UserPosition) query;
     "admin_get_tracked_positions": () -> (vec UserPosition) query;

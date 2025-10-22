@@ -474,8 +474,9 @@ fn update_permissions(req: UpdatePermissionsRequest) -> Result<Permissions, Stri
     let mut permissions = PERMISSIONS_MAP.with(|map| {
         map.borrow()
             .get(&StorableString(permissions_id.clone()))
-            .unwrap().0.clone()
-    });
+            .ok_or_else(|| format!("Permissions with ID {} not found", permissions_id))
+            .map(|p| p.0.clone())
+    })?;
     ic_cdk::println!("✅ Step 2 Complete: Existing permissions loaded");
     
     // Log current state
@@ -926,8 +927,9 @@ async fn supply_to_aave_secured(
     token_symbol: String,
 ) -> Result<String, String> {
     let caller = ic_cdk::caller();
-    let perminissions = get_permissions(permissions_id.clone());
-    let chain_id = perminissions.unwrap().chain_id;
+    let perminissions = get_permissions(permissions_id.clone())
+        .map_err(|e| format!("Failed to get permissions: {}", e))?;
+    let chain_id = perminissions.chain_id;
     let token_address = token_address.parse().map_err(|_| "Invalid token address format")?;
     supply_to_aave_with_permissions(token_address, token_symbol, amount_human, permissions_id, caller, chain_id).await
 }
@@ -941,8 +943,9 @@ async fn withdraw_from_aave_secured(
     token_symbol: String,
 ) -> Result<String, String> {
     let caller = ic_cdk::caller();
-    let perminissions = get_permissions(permissions_id.clone());
-    let chain_id = perminissions.unwrap().chain_id;
+    let perminissions = get_permissions(permissions_id.clone())
+        .map_err(|e| format!("Failed to get permissions: {}", e))?;
+    let chain_id = perminissions.chain_id;
     let token_address = token_address.parse().map_err(|_| "Invalid token address format")?;
     withdraw_from_aave_with_permissions(token_address, token_symbol, amount_human, permissions_id, caller, chain_id).await
 }
@@ -1525,6 +1528,64 @@ fn admin_disable_position_auto_sync() -> Result<String, String> {
     ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
 
     apy_parser::disable_position_auto_sync()
+}
+
+/// Update the permissions_id for a user position (Admin only)
+#[update]
+fn admin_update_position_permissions_id(
+    position_id: String,
+    new_permissions_id: String
+) -> Result<UserPosition, String> {
+    is_admin()?;
+    ic_cdk::println!("🔄 [ADMIN] Updating permissions_id for position: {}", position_id);
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+    ic_cdk::println!("  New permissions_id: {}", new_permissions_id);
+
+    // Get the position
+    let mut position = USER_POSITIONS_MAP.with(|map| {
+        map.borrow()
+            .get(&StorableString(position_id.clone()))
+            .ok_or_else(|| "Position not found".to_string())
+            .map(|p| p.0.clone())
+    })?;
+
+    ic_cdk::println!("  Position found for user: {}", position.user_principal);
+    ic_cdk::println!("  Current permissions_id: {}", position.permissions_id);
+
+    // Verify new permissions exist
+    let new_permissions = PERMISSIONS_MAP.with(|map| {
+        map.borrow()
+            .get(&StorableString(new_permissions_id.clone()))
+            .ok_or_else(|| "New permissions not found".to_string())
+            .map(|p| p.0.clone())
+    })?;
+
+    // Verify owner matches
+    if new_permissions.owner != position.user_principal {
+        let error = format!(
+            "New permissions owner ({}) does not match position owner ({})",
+            new_permissions.owner, position.user_principal
+        );
+        ic_cdk::println!("❌ {}", error);
+        return Err(error);
+    }
+
+    ic_cdk::println!("✅ New permissions verified, owner matches");
+
+    // Update permissions_id
+    position.permissions_id = new_permissions_id.clone();
+    position.updated_at = now();
+
+    // Save updated position
+    USER_POSITIONS_MAP.with(|map| {
+        map.borrow_mut().insert(
+            StorableString(position_id.clone()),
+            StorableUserPosition(position.clone())
+        );
+    });
+
+    ic_cdk::println!("✅ Position permissions_id updated successfully");
+    Ok(position)
 }
 
 /// Check if automatic position synchronization is enabled (Public query)
