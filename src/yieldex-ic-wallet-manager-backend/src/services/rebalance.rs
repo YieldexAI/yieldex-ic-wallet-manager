@@ -184,19 +184,7 @@ async fn execute_same_chain_same_asset(
         Ok(withdraw_result) => {
             ic_cdk::println!("✅ Withdraw successful: {}", withdraw_result);
             result.withdraw_tx = extract_tx_hash(&withdraw_result);
-
-            // Sync position after successful withdraw
-            ic_cdk::println!("🔄 Syncing source position after withdrawal...");
-            match crate::services::position_sync::sync_position_after_withdraw(
-                user_principal,
-                recommendation.from_protocol.clone(),
-                recommendation.asset.clone(),
-                chain_id,
-                recommendation.position_size.clone(),
-            ).await {
-                Ok(_) => ic_cdk::println!("✅ Source position synced after withdrawal"),
-                Err(e) => ic_cdk::println!("⚠️ Warning: Source position sync failed: {}", e),
-            }
+            // Note: Position sync is handled automatically by the protocol withdraw function
         },
         Err(e) => {
             ic_cdk::println!("❌ Withdraw failed: {}", e);
@@ -219,30 +207,17 @@ async fn execute_same_chain_same_asset(
             ic_cdk::println!("✅ Supply successful: {}", supply_result);
             result.supply_tx = extract_tx_hash(&supply_result);
             result.status = "success".to_string();
-
-            // Sync position after successful supply
-            ic_cdk::println!("🔄 Syncing target position after supply...");
-            let token_address = get_usdc_address(chain_id)
-                .map(|addr| format!("0x{:x}", addr))
-                .unwrap_or_else(|_| "unknown".to_string());
-
-            match crate::services::position_sync::sync_position_after_supply(
-                user_principal,
-                permissions_id,
-                recommendation.to_protocol.clone(),
-                recommendation.to_asset.clone(),
-                token_address,
-                chain_id,
-                recommendation.position_size.clone(),
-            ).await {
-                Ok(_) => ic_cdk::println!("✅ Target position synced after supply"),
-                Err(e) => ic_cdk::println!("⚠️ Warning: Target position sync failed: {}", e),
-            }
+            // Note: Position sync is handled automatically by the protocol supply function
         },
         Err(e) => {
             ic_cdk::println!("❌ Supply failed: {}", e);
             result.status = "partial".to_string();
-            result.error_details = Some(format!("Supply failed: {}. Funds withdrawn but not supplied.", e));
+            result.error_details = Some(format!(
+                "Supply to {} failed: {}. Funds successfully withdrawn from {} and are now in your wallet. Please check your balance and retry the supply operation manually if needed.",
+                recommendation.to_protocol,
+                e,
+                recommendation.from_protocol
+            ));
         }
     }
 
