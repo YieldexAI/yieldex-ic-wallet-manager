@@ -1215,6 +1215,16 @@ fn admin_set_apy_threshold(percent: f64) -> Result<String, String> {
     scheduler::set_apy_threshold(percent)
 }
 
+/// Set minimum position size in USD (Admin only)
+#[update]
+fn admin_set_min_position_size(amount_usd: f64) -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("💰 [ADMIN] Setting minimum position size to ${}", amount_usd);
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    scheduler::set_min_position_size(amount_usd)
+}
+
 /// Manually trigger scheduler execution (Admin only)
 #[update]
 async fn admin_trigger_rebalance() -> Result<Vec<RebalanceExecution>, String> {
@@ -1569,6 +1579,12 @@ fn post_upgrade() {
 
     // Stable memory is automatically preserved, no specific restore needed for StableBTreeMap
 
+    // Check if scheduler needs initialization (for canisters upgraded before scheduler was added)
+    if scheduler::get_scheduler_config().is_err() {
+        ic_cdk::println!("🔧 Scheduler not initialized, initializing now...");
+        scheduler::init_scheduler();
+    }
+
     // Restore scheduler timer if it was enabled before upgrade
     if scheduler::is_scheduler_enabled() {
         ic_cdk::println!("🔄 Scheduler was enabled, restarting timer...");
@@ -1576,6 +1592,9 @@ fn post_upgrade() {
     } else {
         ic_cdk::println!("ℹ️ Scheduler is disabled, timer not started.");
     }
+
+    // APY parser is always initialized (it has a default config)
+    // No need for explicit initialization check, just restore timer if needed
 
     // Restore APY parser timer if it was enabled before upgrade
     if apy_parser::is_apy_parser_enabled() {

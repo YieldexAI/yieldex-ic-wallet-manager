@@ -324,6 +324,7 @@ service : {
     "admin_stop_scheduler": () -> (variant { Ok: text; Err: text });
     "admin_set_scheduler_interval": (seconds: nat64) -> (variant { Ok: text; Err: text });
     "admin_set_apy_threshold": (percent: float64) -> (variant { Ok: text; Err: text });
+    "admin_set_min_position_size": (amount_usd: float64) -> (variant { Ok: text; Err: text });
     "admin_trigger_rebalance": () -> (variant { Ok: vec RebalanceExecution; Err: text });
     "admin_get_scheduler_status": () -> (variant { Ok: SchedulerStatus; Err: text }) query;
     "admin_get_rebalance_history": (limit: opt nat64) -> (variant { Ok: vec RebalanceExecution; Err: text }) query;

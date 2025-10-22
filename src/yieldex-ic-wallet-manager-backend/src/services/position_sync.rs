@@ -148,7 +148,7 @@ pub async fn sync_position_after_supply(
                 token_address,
                 chain_id,
                 position_size: amount_supplied.clone(),
-                tracked: false, // Default to false, user can enable later
+                tracked: true, // Default to true, user can disable if needed
                 added_at: timestamp,
                 updated_at: timestamp,
             };

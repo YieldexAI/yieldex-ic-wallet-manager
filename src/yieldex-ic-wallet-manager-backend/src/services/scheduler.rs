@@ -484,6 +484,28 @@ pub fn set_apy_threshold(percent: f64) -> Result<String, String> {
     Ok(format!("APY threshold updated to {}%", percent))
 }
 
+/// Set minimum position size in USD
+pub fn set_min_position_size(amount_usd: f64) -> Result<String, String> {
+    ic_cdk::println!("💰 Setting minimum position size to ${}...", amount_usd);
+
+    if amount_usd < 0.0 {
+        return Err("Minimum position size must be positive".to_string());
+    }
+
+    SCHEDULER_CONFIG.with(|c| {
+        let mut borrowed = c.borrow_mut();
+        if let Some(ref mut config) = *borrowed {
+            config.min_position_size = amount_usd.to_string();
+            config.updated_at = crate::now();
+        } else {
+            return Err("Scheduler not initialized".to_string());
+        }
+        Ok(())
+    })?;
+
+    Ok(format!("Minimum position size updated to ${}", amount_usd))
+}
+
 /// Manually trigger scheduler execution
 pub async fn trigger_manual_execution() -> Result<Vec<RebalanceExecution>, String> {
     ic_cdk::println!("🔨 Manual scheduler execution triggered...");
