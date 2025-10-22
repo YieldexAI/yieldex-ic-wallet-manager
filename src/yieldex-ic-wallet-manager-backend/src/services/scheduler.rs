@@ -585,3 +585,22 @@ pub fn get_user_rebalance_history(user: Principal, limit: Option<u64>) -> Vec<Re
         user_history.into_iter().take(limit).collect()
     })
 }
+
+/// Clear all rebalance history (Admin only - for data migration)
+pub fn clear_rebalance_history() -> Result<String, String> {
+    ic_cdk::println!("🗑️ Clearing all rebalance history...");
+
+    let count = REBALANCE_HISTORY_MAP.with(|map| {
+        let len = map.borrow().len();
+        // Get all keys
+        let keys: Vec<_> = map.borrow().iter().map(|(k, _)| k).collect();
+        // Remove all entries
+        for key in keys {
+            map.borrow_mut().remove(&key);
+        }
+        len
+    });
+
+    ic_cdk::println!("✅ Cleared {} rebalance history records", count);
+    Ok(format!("Cleared {} rebalance history records", count))
+}

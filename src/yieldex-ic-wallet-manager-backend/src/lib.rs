@@ -1255,6 +1255,16 @@ fn admin_get_user_rebalance_history(user: Principal, limit: Option<u64>) -> Resu
     Ok(scheduler::get_user_rebalance_history(user, limit))
 }
 
+/// Clear all rebalance history (Admin only - for data migration)
+#[update]
+fn admin_clear_rebalance_history() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("🗑️ [ADMIN] Clearing all rebalance history");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    scheduler::clear_rebalance_history()
+}
+
 // --- User Position Management API ---
 
 /// Create a new position for automatic tracking and rebalancing
@@ -1475,6 +1485,16 @@ fn admin_get_apy_parser_status() -> Result<ApyParserStatus, String> {
     ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
 
     Ok(apy_parser::get_apy_parser_status())
+}
+
+/// Clear all APY history (Admin only - for data migration)
+#[update]
+fn admin_clear_apy_history() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("🗑️ [ADMIN] Clearing all APY history");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    apy_parser::clear_apy_history()
 }
 
 // --- Helper Functions ---

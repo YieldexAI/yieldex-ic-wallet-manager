@@ -698,17 +698,17 @@ pub fn get_apy_parser_config() -> ApyParserConfig {
 /// Get APY parser status
 pub fn get_apy_parser_status() -> crate::types::ApyParserStatus {
     let config = APY_PARSER_CONFIG.with(|c| c.borrow().clone());
-    
+
     // Check if timer is active
     let timer_active = APY_PARSER_TIMER_ID.with(|timer_id| {
         timer_id.borrow().is_some()
     });
-    
+
     // Get total records count from APY_HISTORY_MAP
     let total_records = crate::APY_HISTORY_MAP.with(|map| {
         map.borrow().len()
     });
-    
+
     crate::types::ApyParserStatus {
         enabled: config.enabled,
         interval_seconds: config.interval_seconds,
@@ -718,4 +718,23 @@ pub fn get_apy_parser_status() -> crate::types::ApyParserStatus {
         monitored_protocols: config.monitored_protocols.clone(),
         monitored_chains: config.monitored_chains.clone(),
     }
+}
+
+/// Clear all APY history records (Admin only - for data migration)
+pub fn clear_apy_history() -> Result<String, String> {
+    ic_cdk::println!("🗑️ Clearing all APY history...");
+
+    let count = crate::APY_HISTORY_MAP.with(|map| {
+        let len = map.borrow().len();
+        // Get all keys
+        let keys: Vec<_> = map.borrow().iter().map(|(k, _)| k).collect();
+        // Remove all entries
+        for key in keys {
+            map.borrow_mut().remove(&key);
+        }
+        len
+    });
+
+    ic_cdk::println!("✅ Cleared {} APY history records", count);
+    Ok(format!("Cleared {} APY history records", count))
 }

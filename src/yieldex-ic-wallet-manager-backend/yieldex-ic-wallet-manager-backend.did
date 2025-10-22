@@ -85,21 +85,44 @@ type ApyParserStatus = record {
 };
 
 // 🆕 Recommendation Engine Types
+type RecommendationType = variant {
+    StandardTransfer;
+    CrossChainTransfer;
+};
+
+type SwapDetails = record {
+    from_token: text;
+    to_token: text;
+    from_market: opt text;
+    to_market: opt text;
+    swap_protocol: opt text;
+};
+
 type Recommendation = record {
+    asset: text;
+    to_asset: text;
+    from_chain: text;
+    to_chain: opt text;
     from_protocol: text;
     to_protocol: text;
-    token_address: text;
-    token_symbol: text;
-    amount: text;
-    chain_id: nat64;
-    expected_apy_gain: text;
+    current_apy: float64;
+    target_apy: float64;
+    estimated_profit: float64;
+    gas_cost: float64;
+    position_size: text;
+    pool_id: opt text;
+    recommendation_type: RecommendationType;
+    swap_details: opt SwapDetails;
 };
 
 type ExecutionResult = record {
-    success: bool;
-    tx_hash: opt text;
-    error: opt text;
-    gas_used: opt nat64;
+    status: text;
+    withdraw_tx: opt text;
+    swap_tx: opt text;
+    supply_tx: opt text;
+    amount_transferred: opt text;
+    actual_gas_cost: opt float64;
+    error_details: opt text;
 };
 
 // 🆕 Scheduler Types
@@ -122,21 +145,13 @@ type SchedulerStatus = record {
 };
 
 type RebalanceExecution = record {
-    id: text;
+    execution_id: text;
     user_principal: principal;
-    user_evm_address: text;
+    position_id: text;
+    recommendation: Recommendation;
+    result: ExecutionResult;
+    apy_difference: float64;
     timestamp: nat64;
-    from_protocol: text;
-    to_protocol: text;
-    token_address: text;
-    token_symbol: text;
-    amount: text;
-    chain_id: nat64;
-    success: bool;
-    tx_hash: opt text;
-    error_message: opt text;
-    gas_used: opt nat64;
-    apy_gain: text;
 };
 
 // 🆕 User Position Types
@@ -313,6 +328,7 @@ service : {
     "admin_get_scheduler_status": () -> (variant { Ok: SchedulerStatus; Err: text }) query;
     "admin_get_rebalance_history": (limit: opt nat64) -> (variant { Ok: vec RebalanceExecution; Err: text }) query;
     "admin_get_user_rebalance_history": (user: principal, limit: opt nat64) -> (variant { Ok: vec RebalanceExecution; Err: text }) query;
+    "admin_clear_rebalance_history": () -> (variant { Ok: text; Err: text });
 
     // 🆕 User Position Management operations
     "create_position": (permissions_id: text, protocol: text, asset: text, token_address: text, chain_id: nat64, position_size: text, tracked: bool) -> (variant { Ok: UserPosition; Err: text });
@@ -331,6 +347,7 @@ service : {
     "admin_get_apy_history": (protocol: text, asset: text, chain_id: nat64, limit: opt nat64) -> (vec ApyHistoryRecord) query;
     "admin_get_all_positions": () -> (vec UserPosition) query;
     "admin_get_tracked_positions": () -> (vec UserPosition) query;
+    "admin_clear_apy_history": () -> (variant { Ok: text; Err: text });
 
     // Public APY query methods
     "get_apy_history_all": (limit: opt nat64) -> (vec ApyHistoryRecord) query;
