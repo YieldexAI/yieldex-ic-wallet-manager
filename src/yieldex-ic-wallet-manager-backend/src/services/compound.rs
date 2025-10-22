@@ -211,23 +211,39 @@ pub async fn supply_usdc_to_compound_with_permissions(
     // 10. Update daily usage for permissions
     ic_cdk::println!("✅ Step 7: Updating protocol usage tracking...");
     let usage_result = set_daily_usage(
-        permissions_id,
+        permissions_id.clone(),
         compound_address.to_string(),
         amount_units.try_into().unwrap_or(0),
         user_principal
     );
-    
+
     match usage_result {
         Ok(_) => ic_cdk::println!("✅ Step 7 Complete: Usage tracking updated"),
         Err(e) => ic_cdk::println!("⚠️ Step 7 Warning: Usage tracking failed: {}", e),
     }
-    
+
+    // 11. Sync user position after successful supply
+    ic_cdk::println!("✅ Step 8: Syncing user position...");
+    let usdc_address_str = get_usdc_address(chain_id)?.to_string();
+    match crate::services::position_sync::sync_position_after_supply(
+        user_principal,
+        permissions_id,
+        "COMPOUND".to_string(),
+        "USDC".to_string(),
+        usdc_address_str,
+        chain_id,
+        amount_human.clone(),
+    ).await {
+        Ok(_) => ic_cdk::println!("✅ Step 8 Complete: User position synced"),
+        Err(e) => ic_cdk::println!("⚠️ Step 8 Warning: Position sync failed: {}", e),
+    }
+
     let tx_hash = format!("{:?}", supply_tx_hash);
     let success_message = format!(
         "✅ Successfully supplied {} USDC to Compound! Transaction: {}",
         amount_human, tx_hash
     );
-    
+
     ic_cdk::println!("🎉 Compound supply completed successfully");
     Ok(success_message)
 }
@@ -363,18 +379,31 @@ pub async fn withdraw_usdc_from_compound_with_permissions(
         amount_units.try_into().unwrap_or(0),
         user_principal
     );
-    
+
     match usage_result {
         Ok(_) => ic_cdk::println!("✅ Step 7 Complete: Usage tracking updated"),
         Err(e) => ic_cdk::println!("⚠️ Step 7 Warning: Usage tracking failed: {}", e),
     }
-    
+
+    // 11. Sync user position after successful withdrawal
+    ic_cdk::println!("✅ Step 8: Syncing user position...");
+    match crate::services::position_sync::sync_position_after_withdraw(
+        user_principal,
+        "COMPOUND".to_string(),
+        "USDC".to_string(),
+        chain_id,
+        amount_human.clone(),
+    ).await {
+        Ok(_) => ic_cdk::println!("✅ Step 8 Complete: User position synced"),
+        Err(e) => ic_cdk::println!("⚠️ Step 8 Warning: Position sync failed: {}", e),
+    }
+
     let tx_hash = format!("{:?}", withdraw_tx_hash);
     let success_message = format!(
         "✅ Successfully withdrew {} USDC from Compound! Transaction: {}",
         amount_human, tx_hash
     );
-    
+
     ic_cdk::println!("🎉 Compound withdrawal completed successfully");
     Ok(success_message)
 }

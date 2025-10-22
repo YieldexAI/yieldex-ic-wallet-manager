@@ -184,6 +184,19 @@ async fn execute_same_chain_same_asset(
         Ok(withdraw_result) => {
             ic_cdk::println!("✅ Withdraw successful: {}", withdraw_result);
             result.withdraw_tx = extract_tx_hash(&withdraw_result);
+
+            // Sync position after successful withdraw
+            ic_cdk::println!("🔄 Syncing source position after withdrawal...");
+            match crate::services::position_sync::sync_position_after_withdraw(
+                user_principal,
+                recommendation.from_protocol.clone(),
+                recommendation.asset.clone(),
+                chain_id,
+                recommendation.position_size.clone(),
+            ).await {
+                Ok(_) => ic_cdk::println!("✅ Source position synced after withdrawal"),
+                Err(e) => ic_cdk::println!("⚠️ Warning: Source position sync failed: {}", e),
+            }
         },
         Err(e) => {
             ic_cdk::println!("❌ Withdraw failed: {}", e);
@@ -198,7 +211,7 @@ async fn execute_same_chain_same_asset(
     match execute_protocol_supply(
         &recommendation.to_protocol,
         recommendation.position_size.clone(),
-        permissions_id,
+        permissions_id.clone(),
         user_principal,
         chain_id
     ).await {
@@ -206,6 +219,25 @@ async fn execute_same_chain_same_asset(
             ic_cdk::println!("✅ Supply successful: {}", supply_result);
             result.supply_tx = extract_tx_hash(&supply_result);
             result.status = "success".to_string();
+
+            // Sync position after successful supply
+            ic_cdk::println!("🔄 Syncing target position after supply...");
+            let token_address = get_usdc_address(chain_id)
+                .map(|addr| format!("0x{:x}", addr))
+                .unwrap_or_else(|_| "unknown".to_string());
+
+            match crate::services::position_sync::sync_position_after_supply(
+                user_principal,
+                permissions_id,
+                recommendation.to_protocol.clone(),
+                recommendation.to_asset.clone(),
+                token_address,
+                chain_id,
+                recommendation.position_size.clone(),
+            ).await {
+                Ok(_) => ic_cdk::println!("✅ Target position synced after supply"),
+                Err(e) => ic_cdk::println!("⚠️ Warning: Target position sync failed: {}", e),
+            }
         },
         Err(e) => {
             ic_cdk::println!("❌ Supply failed: {}", e);

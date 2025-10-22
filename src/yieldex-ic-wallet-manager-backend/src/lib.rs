@@ -1497,6 +1497,32 @@ fn admin_clear_apy_history() -> Result<String, String> {
     apy_parser::clear_apy_history()
 }
 
+/// Enable automatic position synchronization (Admin only)
+#[update]
+fn admin_enable_position_auto_sync() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("▶️ [ADMIN] Enabling automatic position synchronization");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    apy_parser::enable_position_auto_sync()
+}
+
+/// Disable automatic position synchronization (Admin only)
+#[update]
+fn admin_disable_position_auto_sync() -> Result<String, String> {
+    is_admin()?;
+    ic_cdk::println!("⏸️ [ADMIN] Disabling automatic position synchronization");
+    ic_cdk::println!("📝 Requested by admin principal: {}", ic_cdk::caller());
+
+    apy_parser::disable_position_auto_sync()
+}
+
+/// Check if automatic position synchronization is enabled (Public query)
+#[query]
+fn is_position_auto_sync_enabled() -> bool {
+    apy_parser::is_position_auto_sync_enabled()
+}
+
 // --- Helper Functions ---
 
 fn get_ecdsa_key_name() -> String {

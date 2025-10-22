@@ -227,12 +227,28 @@ pub async fn supply_to_aave_with_permissions(
                     
                     // Update daily usage
                     ic_cdk::println!("✅ Step 11: Updating daily usage limits...");
-                    if let Err(e) = set_daily_usage(permissions_id, aave_config.pool_address.to_string(), amount_wei.to::<u64>(), user_principal) {
+                    if let Err(e) = set_daily_usage(permissions_id.clone(), aave_config.pool_address.to_string(), amount_wei.to::<u64>(), user_principal) {
                         ic_cdk::println!("⚠️ Warning: Failed to update daily usage: {}", e);
                     } else {
                         ic_cdk::println!("✅ Step 11 Complete: Daily usage limits updated");
                     }
-                    
+
+                    // Sync user position after successful supply
+                    ic_cdk::println!("✅ Step 12: Syncing user position...");
+                    let token_address_str = format!("0x{:x}", token_address);
+                    match crate::services::position_sync::sync_position_after_supply(
+                        user_principal,
+                        permissions_id,
+                        "AAVE".to_string(),
+                        token_symbol.clone(),
+                        token_address_str,
+                        chain_id,
+                        amount_human.clone(),
+                    ).await {
+                        Ok(_) => ic_cdk::println!("✅ Step 12 Complete: User position synced"),
+                        Err(e) => ic_cdk::println!("⚠️ Step 12 Warning: Position sync failed: {}", e),
+                    }
+
                     let success_msg = format!("Successfully supplied {} {} to AAVE. Transaction: {:?}", amount_human, token_symbol, tx_hash);
                     ic_cdk::println!("🎉 AAVE {} supply completed successfully: {}", token_symbol, success_msg);
                     Ok(success_msg)
@@ -407,7 +423,20 @@ pub async fn withdraw_from_aave_with_permissions(
                     } else {
                         ic_cdk::println!("✅ Step 11 Complete: Daily usage limits updated");
                     }
-                    
+
+                    // Sync user position after successful withdrawal
+                    ic_cdk::println!("✅ Step 12: Syncing user position...");
+                    match crate::services::position_sync::sync_position_after_withdraw(
+                        user_principal,
+                        "AAVE".to_string(),
+                        token_symbol.clone(),
+                        chain_id,
+                        amount_human.clone(),
+                    ).await {
+                        Ok(_) => ic_cdk::println!("✅ Step 12 Complete: User position synced"),
+                        Err(e) => ic_cdk::println!("⚠️ Step 12 Warning: Position sync failed: {}", e),
+                    }
+
                     let success_msg = format!("Successfully withdrew {} {} from AAVE. Transaction: {:?}", amount_human, token_symbol, tx_hash);
                     ic_cdk::println!("🎉 AAVE {} withdraw completed successfully: {}", token_symbol, success_msg);
                     Ok(success_msg)

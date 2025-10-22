@@ -42,6 +42,9 @@ pub struct ApyParserConfig {
 
     /// List of chains to monitor
     pub monitored_chains: Vec<u64>,
+
+    /// Whether automatic position synchronization is enabled
+    pub auto_sync_positions: bool,
 }
 
 impl Default for ApyParserConfig {
@@ -54,6 +57,7 @@ impl Default for ApyParserConfig {
             monitored_chains: vec![
                 crate::services::rpc_service::ARBITRUM_CHAIN_ID,
             ],
+            auto_sync_positions: false, // Disabled by default for safety
         }
     }
 }
@@ -737,4 +741,39 @@ pub fn clear_apy_history() -> Result<String, String> {
 
     ic_cdk::println!("✅ Cleared {} APY history records", count);
     Ok(format!("Cleared {} APY history records", count))
+}
+
+// =============================================================================
+// Position Auto-Sync Configuration
+// =============================================================================
+
+/// Enable automatic position synchronization
+pub fn enable_position_auto_sync() -> Result<String, String> {
+    ic_cdk::println!("▶️ Enabling automatic position synchronization...");
+
+    APY_PARSER_CONFIG.with(|c| {
+        let mut cfg = c.borrow_mut();
+        cfg.auto_sync_positions = true;
+    });
+
+    ic_cdk::println!("✅ Automatic position synchronization enabled");
+    Ok("Automatic position synchronization enabled".to_string())
+}
+
+/// Disable automatic position synchronization
+pub fn disable_position_auto_sync() -> Result<String, String> {
+    ic_cdk::println!("⏸️ Disabling automatic position synchronization...");
+
+    APY_PARSER_CONFIG.with(|c| {
+        let mut cfg = c.borrow_mut();
+        cfg.auto_sync_positions = false;
+    });
+
+    ic_cdk::println!("✅ Automatic position synchronization disabled");
+    Ok("Automatic position synchronization disabled".to_string())
+}
+
+/// Check if automatic position synchronization is enabled
+pub fn is_position_auto_sync_enabled() -> bool {
+    APY_PARSER_CONFIG.with(|c| c.borrow().auto_sync_positions)
 }
